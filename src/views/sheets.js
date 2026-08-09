@@ -46,6 +46,7 @@ export function renderEntry(){
   const v=$('#view');v.innerHTML='';const wrap=el('div','fade');v.append(wrap);
 
   const rows=txRows();
+  const shownRows=entryRowsForScreen(rows);
   const real=rows.filter(r=>r.company||r.work||n(r.received)||n(r.expense));
   const S=k=>rows.reduce((a,r)=>a+n(r[k]),0);
 
@@ -73,11 +74,11 @@ export function renderEntry(){
     <th class="c" style="width:96px">Profit</th><th class="c" style="width:132px">Paid From</th>
     <th style="width:34px"></th></tr></thead>`;
   const body=el('tbody');body.id='entrybody';
-  if(!rows.length){
+  if(!shownRows.length){
     const tr=el('tr'),td=el('td');td.colSpan=10;
     td.innerHTML='<div class="empty"><div class="e">▦</div>No entries match this filter.</div>';
     tr.append(td);body.append(tr);
-  } else rows.forEach((r,i)=>body.append(txRow(r,i)));
+  } else shownRows.forEach((r,i)=>body.append(txRow(r,i)));
   tb.append(body);
   const tf=el('tfoot');
   tf.innerHTML=`<tr><td colspan="5" class="l">TOTAL · ${real.length} ENTRIES</td>
@@ -130,9 +131,20 @@ export function renderEntry(){
   requestAnimationFrame(()=>{
     if(SKIP_FOCUS){SKIP_FOCUS=false;return;}
     gw.scrollTop=gw.scrollHeight;
-    const first=rows.findIndex(isBlankTx);
-    focusCell(gw,first<0?rows.length-1:first,COL.company);
+    const first=shownRows.findIndex(isBlankTx);
+    focusCell(gw,first<0?shownRows.length-1:first,COL.company);
   });
+}
+
+export function mobileEntryMode(){
+  return typeof matchMedia==='function' && matchMedia('(max-width:560px)').matches;
+}
+
+export function entryRowsForScreen(rows){
+  if(!mobileEntryMode())return rows;
+  const real=rows.filter(r=>!isBlankTx(r));
+  const blank=rows.find(isBlankTx);
+  return [...(real.length?[real[real.length-1]]:[]),...(blank?[blank]:[])];
 }
 
 export function growEntry(quiet){
@@ -187,9 +199,9 @@ export function refreshEntryTotals(){
 
 export let SKIP_FOCUS=false;
 
-export const HEAD_ACCOUNTS=['ADCB','NOQODI','ABRAR CARD','IRFAN CARD','COUNTER CASH'];
+export const HEAD_ACCOUNTS=['ADCB','COUNTER CASH','IRFAN ACCOUNT','NOQODI','ABRAR CARD','IRFAN CARD'];
 
-export const PANEL_HIDDEN=['RAHIM WPS','CUSTOMER CARD','IRFAN ACCOUNT','MASHREQ',
+export const PANEL_HIDDEN=['RAHIM WPS','CUSTOMER CARD','MASHREQ',
   'OFFICE EXPENSES','WITHDRAWN PROFIT','RESERVES'];
 
 export function buildAccountPanel(){
@@ -305,6 +317,7 @@ export function txRows(){
 
 export function txRow(r,rowIdx){
   const tr=el('tr');tr.dataset.id=r.id;
+  const blankAtRender=isBlankTx(r);
   const rn=el('td','rn',isBlankTx(r)?'·':String(rowIdx+1));
   if(isBlankTx(r))tr.classList.add('blank');
   tr.append(rn);
@@ -368,6 +381,12 @@ export function txRow(r,rowIdx){
     save();renderEntry();toast('Row deleted');}};
   at.append(db);tr.append(at);
   bindRowLock(tr,!isBlankTx(r));      // saved rows need a double-click to edit
+  if(blankAtRender){
+    tr.addEventListener('focusout',()=>{
+      if(!mobileEntryMode()||isBlankTx(r))return;
+      setTimeout(()=>{if(!tr.contains(document.activeElement))renderEntry();},0);
+    });
+  }
   return tr;
 }
 

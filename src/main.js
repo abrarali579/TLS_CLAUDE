@@ -178,6 +178,32 @@ function initMobile() {
   $("#nav").addEventListener("click", (e) => { if (e.target.closest("a")) closeNav(); });
 }
 
+function initMobileQuickActions() {
+  const bar = $("#mobilebar");
+  if (!bar) return;
+  const go = (view, after) => {
+    switchView(view);
+    closeNav();
+    if (after) requestAnimationFrame(after);
+  };
+  const actions = [
+    { v: "entry", i: "▦", l: "Entry", fn: () => go("entry") },
+    { v: "payments", i: "+", l: "Payment", fn: () => go("payments", () => growPayments()) },
+    { v: "expenses", i: "-", l: "Expense", fn: () => go("expenses", () => growExpenses()) },
+    { v: "search", i: "⌕", l: "Search", fn: openSearch },
+    { v: "statement", i: "▤", l: "Statement", fn: () => go("statement") },
+    { v: "alerts", i: "!", l: "Alerts", fn: () => go("alerts") },
+  ];
+  actions.forEach((a) => {
+    const b = el("button");
+    b.type = "button";
+    b.dataset.v = a.v;
+    b.innerHTML = `<span class="mi">${a.i}</span><span>${a.l}</span>`;
+    b.onclick = a.fn;
+    bar.append(b);
+  });
+}
+
 (async function boot() {
   try { setTheme(localStorage.getItem("tl_theme") || "light"); } catch (e) { setTheme("light"); }
   const ts = $("#tsearch"); if (ts) ts.onclick = openSearch;
@@ -187,6 +213,7 @@ function initMobile() {
   buildNav();
   showWhoIsSignedIn();
   initMobile();
+  initMobileQuickActions();
   initAI();
 
   // Work out where data lives before touching it: the office server if it

@@ -41,6 +41,7 @@ into the build.
 
 Read these, in this order:
 
+- **[NEXT.md](NEXT.md)** — where things stand and what to do next
 - **[SERVER.md](SERVER.md)** — running the shared server for your team
 - **[USING.md](USING.md)** — running the app day to day, where your data lives,
   backups

@@ -699,6 +699,7 @@ nav a .tag{background:rgba(244,63,94,.2);color:#fda4af}
 #scrim{display:none;position:fixed;inset:0;z-index:110;background:rgba(10,20,40,.42);
   backdrop-filter:blur(2px);opacity:0;transition:.22s}
 #scrim.on{opacity:1}
+#mobilebar{display:none}
 
 @media(max-width:820px){
   #navtoggle{display:block}
@@ -738,11 +739,105 @@ nav a .tag{background:rgba(244,63,94,.2);color:#fda4af}
   .pf{height:28px;line-height:26px;font-size:10.5px}
   .fld{padding:10px 13px;font-size:14px}    /* 14px stops iOS zooming on focus */
   nav a{padding:12px 14px;font-size:14px}
+
+  #main{padding-bottom:78px}
+  body.nobar #main{padding-bottom:78px}
+  .view{padding-right:0}
+  .toast{bottom:82px;max-width:calc(100vw - 24px);border-radius:18px}
+  #aifab{bottom:82px}
+  #mobilebar{
+    display:flex;position:fixed;left:8px;right:8px;bottom:8px;z-index:119;
+    gap:4px;padding:7px;border-radius:18px;border:1px solid var(--stroke-2);
+    background:var(--glass-2);box-shadow:var(--shadow);
+    backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);
+    overflow-x:auto;-webkit-overflow-scrolling:touch
+  }
+  #mobilebar button{
+    flex:1 1 52px;min-width:52px;height:48px;border:0;border-radius:13px;
+    background:transparent;color:var(--ink-2);font-family:inherit;font-size:9.5px;
+    font-weight:800;letter-spacing:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:3px;cursor:pointer
+  }
+  #mobilebar button.on{background:var(--glass-hi);color:var(--ink);box-shadow:var(--shadow-sm)}
+  #mobilebar .mi{font-size:17px;line-height:1}
+
+  .entrylayout{gap:10px}
+  .entrymain{gap:10px}
+  .acctpanel,.searchpanel{padding:10px;margin-bottom:0;border-radius:var(--r)}
+  .acctgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding-bottom:0}
+  .acard{min-width:0;padding:9px 8px;border-radius:13px}
+  .acard .an{font-size:8.5px;letter-spacing:.7px;justify-content:center;text-align:center}
+  .acard .av{font-size:18px;text-align:center}
+  .acard .ak{display:none}
+  .acard .flag{display:none}
+  .searchpanel .srchbtn{display:none}
+  .searchpanel .sprow{gap:7px}
+  .searchpanel .sprow .btn{flex:1}
 }
 @media(max-width:480px){
   .kpis{grid-template-columns:1fr}
-  .acctgrid{grid-template-columns:1fr}
   .sprow{flex-wrap:wrap}
+}
+
+@media(max-width:560px){
+  #entrygrid,#paygrid,#expgrid{max-height:none!important;overflow:visible;background:transparent;border:0;box-shadow:none}
+  #entrygrid table.grid,#paygrid table.grid,#expgrid table.grid{min-width:0;width:100%;display:block}
+  #entrygrid thead,#paygrid thead,#expgrid thead{display:none}
+  #entrygrid tbody,#paygrid tbody,#expgrid tbody{display:flex;flex-direction:column;gap:10px}
+  #entrygrid tbody tr,#paygrid tbody tr,#expgrid tbody tr{
+    display:grid;position:relative;height:auto;max-height:none;padding:10px;gap:8px;
+    border:1px solid var(--stroke);border-radius:var(--r);background:var(--glass);
+    box-shadow:var(--shadow-sm)
+  }
+  #entrygrid tbody tr{grid-template-columns:1fr 1fr}
+  #paygrid tbody tr,#expgrid tbody tr{grid-template-columns:1fr 1fr}
+  #entrygrid tbody tr.blank,#paygrid tbody tr.blank,#expgrid tbody tr.blank{background:var(--field);box-shadow:none}
+  #entrygrid tbody tr td,#paygrid tbody tr td,#expgrid tbody tr td{
+    display:flex;flex-direction:column;gap:4px;height:auto;max-height:none;overflow:visible;
+    padding:0;border:0;background:transparent!important
+  }
+  #entrygrid tbody tr td::before,#paygrid tbody tr td::before,#expgrid tbody tr td::before{
+    font-size:8.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--ink-3)
+  }
+  #entrygrid td.rn,#paygrid td.rn,#expgrid td.rn{display:none!important}
+  #entrygrid td:nth-child(2)::before{content:"Date"}
+  #entrygrid td:nth-child(3)::before{content:"Company"}
+  #entrygrid td:nth-child(4)::before{content:"Employee"}
+  #entrygrid td:nth-child(5)::before{content:"Work"}
+  #entrygrid td:nth-child(6)::before{content:"Received"}
+  #entrygrid td:nth-child(7)::before{content:"Expense"}
+  #entrygrid td:nth-child(8)::before{content:"Profit"}
+  #entrygrid td:nth-child(9)::before{content:"Paid From"}
+  #entrygrid td:nth-child(3),#entrygrid td:nth-child(5){grid-column:1 / -1}
+  #paygrid td:nth-child(2)::before{content:"Date"}
+  #paygrid td:nth-child(3)::before{content:"Company"}
+  #paygrid td:nth-child(4)::before{content:"Amount"}
+  #paygrid td:nth-child(5)::before{content:"Into"}
+  #paygrid td:nth-child(6)::before{content:"Remarks"}
+  #paygrid td:nth-child(3),#paygrid td:nth-child(6){grid-column:1 / -1}
+  #expgrid td:nth-child(2)::before{content:"Date"}
+  #expgrid td:nth-child(3)::before{content:"Category"}
+  #expgrid td:nth-child(4)::before{content:"Description"}
+  #expgrid td:nth-child(5)::before{content:"Amount"}
+  #expgrid td:nth-child(6)::before{content:"Paid From"}
+  #expgrid td:nth-child(4){grid-column:1 / -1}
+  #entrygrid .cell,#paygrid .cell,#expgrid .cell,#entrygrid .pf,#paygrid .pf,#expgrid .pf{
+    width:100%;height:42px;border-radius:10px;border:1px solid var(--stroke);
+    background:var(--field);padding:9px 10px;font-size:14px;text-align:left
+  }
+  #entrygrid td.num .cell,#paygrid td.num .cell,#expgrid td.num .cell{text-align:right}
+  #entrygrid td.act,#paygrid td.act,#expgrid td.act{position:absolute;right:16px;top:16px}
+  #entrygrid td.act::before,#paygrid td.act::before,#expgrid td.act::before{display:none}
+  #entrygrid tfoot,#paygrid tfoot,#expgrid tfoot{display:block;margin-top:10px}
+  #entrygrid tfoot tr,#paygrid tfoot tr,#expgrid tfoot tr{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:9px;
+    border-radius:var(--r);background:var(--glass);border:1px solid var(--stroke)
+  }
+  #entrygrid tfoot td,#paygrid tfoot td,#expgrid tfoot td{
+    display:block;padding:0;border:0;background:transparent;text-align:center;font-size:12px
+  }
+  #entrygrid tfoot td.l,#paygrid tfoot td.l,#expgrid tfoot td.l{grid-column:1 / -1;text-align:left}
+  .hint{font-size:11.5px}
 }
 
 /* =========================================================
@@ -813,6 +908,7 @@ nav a .tag{background:rgba(244,63,94,.2);color:#fda4af}
 <div id="deep"><i></i><i></i><i></i><i></i><i></i></div>
 <button id="navtoggle" aria-label="Menu">☰</button>
 <button id="aifab" title="Ask the assistant  ·  Ctrl + /">✦</button>
+<div id="mobilebar" aria-label="Quick actions"></div>
 <div id="scrim"></div>
 <div id="app">
   <aside id="side">

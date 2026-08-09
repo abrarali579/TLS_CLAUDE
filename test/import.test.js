@@ -127,11 +127,16 @@ describe('converting transaction rows', () => {
     expect(problems.some((p) => /profit is 175/.test(p.why))).toBe(true);
   });
 
-  it('drops a second identical row and says so', () => {
-    const line = '05/03/2026,ACME,SEKAR,PRINT,280,51,229,ADCB';
-    const { rows, problems } = convert('transactions', table(`${HEAD}\n${line}\n${line}`));
-    expect(rows.length).toBe(1);
-    expect(problems.some((p) => /duplicate/.test(p.why))).toBe(true);
+  it('KEEPS two identical rows — a repeated sale is a real sale', () => {
+    // This used to drop the second one as a duplicate, which quietly deleted
+    // money: the shop genuinely prints twice for the same walk-in customer, on
+    // the same day, for the same one dirham. Found in the real workbook.
+    const line = '05/03/2026,WALKING PARTY,CASH,PRINT,1,0,1,';
+    const { rows, problems } = convert('transactions', table(`${HEAD}\n${line}\n${line}\n${line}`));
+
+    expect(rows.length).toBe(3);
+    expect(new Set(rows.map((r) => r.id)).size).toBe(3);
+    expect(problems.some((p) => /a repeated sale is a real sale/.test(p.why))).toBe(true);
   });
 
   it('gives up clearly when a required column is missing', () => {
@@ -256,9 +261,7 @@ describe('the awkward things a 1.5-year workbook actually contains', () => {
     expect(classify('REAL DATA - SERVICE_TEMPLATES.csv')).toBe('taskTemplates');
   });
 
-  it('drops a header row repeated in the middle of the data', () => {
-    // Long sheets repeat their headings. Those rows arrive looking like data:
-    // no readable date, no money in them.
+  it('drops a divider row that repeats one word across the columns', () => {
     const csv = [
       'Company,UID/Emirates ID,Worker Name,Inception Date,Expiry Date,Premium',
       'ACME,784197042791638,ALI,05/03/2026,04/03/2027,1200',
@@ -266,9 +269,37 @@ describe('the awkward things a 1.5-year workbook actually contains', () => {
       'ACME,784199911909341,OMAR,06/03/2026,05/03/2027,900',
     ].join('\n');
 
-    const { rows, problems } = convert('insurance', parseTable(csv));
+    const { rows, problems } = convert('insurance', parseTable(csv, SHEETS.insurance.columns));
     expect(rows.length).toBe(2);
-    expect(problems.some((p) => /repeated header/.test(p.why))).toBe(true);
+    expect(problems.some((p) => /repeated header or divider/.test(p.why))).toBe(true);
+  });
+
+  it('keeps a real policy whose dates are unreadable and premium is zero', () => {
+    // The earlier rule discarded any row with no readable date and no money —
+    // 246 of 284 insurance rows vanished. A named worker makes it a record,
+    // however untidy the rest of the row is.
+    const csv = [
+      'No.,Company,UID/Emirates ID,Worker Name,Inception Date,Expiry Date,Premium,Total Premium',
+      '1,Time Link,784199511987994,AYESHA JABBAR,11-05-2025,10-05-2027,120,126',
+      '2,Time Link,784199893574758,YASEEA IRFAN,PENDING,TBC,0,0',
+    ].join('\n');
+
+    const { rows } = convert('insurance', parseTable(csv, SHEETS.insurance.columns));
+    expect(rows.length, 'a named worker is a policy, however untidy the row').toBe(2);
+    expect(rows[1].worker).toBe('YASEEA IRFAN');
+  });
+
+  it('says nothing about the hundreds of empty rows a sheet export carries', () => {
+    // Google Sheets exports every row up to 1000. The visa tracker had 748 of
+    // them, and each produced a complaint until the emptiness check was moved
+    // ahead of the tick-box columns.
+    const rowsOut = ['COMPANY NAME,EMPLOYEE NAME,FULL PACKAGE,LABOUR FEE,PROGRESS',
+                     'SOUUL,JABIR,TRUE,TRUE,92%'];
+    for (let i = 0; i < 20; i++) rowsOut.push(',,,,');
+
+    const { rows, problems } = convert('visa', parseTable(rowsOut.join('\n'), SHEETS.visa.columns));
+    expect(rows.length).toBe(1);
+    expect(problems.filter((p) => !p.note).length).toBe(0);
   });
 
   it('keeps a row that has a bad date but real money in it', () => {

@@ -25,9 +25,15 @@ import { n } from '../../src/lib/format.js';
 const IMPORT_DIR = process.env.TIMELINK_IMPORT_DIR || 'import';
 
 /** A row's identity, from the fields that define it. Stable across re-imports. */
-export function rowKey(sheet, row) {
+export function rowKey(sheet, row, occurrence = 1) {
   const parts = SHEETS[sheet].key.map((f) => String(row[f] ?? '').trim().toUpperCase());
-  return 'imp-' + createHash('sha1').update(sheet + '|' + parts.join('|')).digest('hex').slice(0, 12);
+  // `occurrence` separates rows that really are identical. A shop can print
+  // twice for the same walk-in customer on the same day for the same price —
+  // two real transactions, not one entered twice. Counting occurrences rather
+  // than using the line number keeps the id stable when rows are appended,
+  // which is how a running sheet grows.
+  const tail = occurrence > 1 ? `|#${occurrence}` : '';
+  return 'imp-' + createHash('sha1').update(sheet + '|' + parts.join('|') + tail).digest('hex').slice(0, 12);
 }
 
 /** Which sheet type is this file? */
@@ -85,12 +91,29 @@ export function convert(sheet, table) {
   let skipped = 0;
   let lastDate = '';
   let carried = 0;
+  const occurrences = new Map();
+  let repeats = 0;
 
   table.rows.forEach((raw) => {
     const line = raw.__line; // the row number the spreadsheet shows
     const out = {};
     for (const [field, col] of Object.entries(mapping)) out[field] = raw[col] ?? '';
     if (dateColumnIndex) out[dateColumnIndex.field] = raw.__cells?.[dateColumnIndex.index] ?? '';
+
+    // Decide emptiness on the real columns only. Tick-box groups fill in
+    // false-for-everything, which used to make a blank padding row look like
+    // data and produce a complaint for every empty row in the sheet.
+    if (Object.values(out).every((v) => String(v).trim() === '')) { skipped++; return; }
+
+    // A divider row repeats one word across the columns — "EID | EID | EID".
+    // Checked here, on the text as written: once numbers are read, an empty
+    // cell becomes 0 and the row no longer looks uniform.
+    const written = Object.values(out).map((v) => String(v).trim()).filter((v) => v !== '');
+    if (written.length >= 3 && new Set(written).size === 1) {
+      problems.push({ line, why: 'looks like a repeated header or divider row — skipped' });
+      skipped++;
+      return;
+    }
 
     // Tick-box columns (the visa tracker) become one object of step -> done.
     if (def.booleanGroup) {
@@ -103,8 +126,6 @@ export function convert(sheet, table) {
       if (Object.keys(steps).length) out[def.booleanGroup.field] = steps;
     }
 
-    // A row with nothing in any mapped column is padding, not data.
-    if (Object.values(out).every((v) => String(v).trim() === '')) { skipped++; return; }
 
     // Long spreadsheets repeat their header row every so often, and those
     // rows arrive looking like data. Read the values first, then decide.
@@ -118,7 +139,9 @@ export function convert(sheet, table) {
 
     const everyDateFailed = dateTries.length > 0 && dateTries.every((d) => !d.ok);
     const everyNumberZero = (def.numbers ?? []).length > 0 && (def.numbers ?? []).every((f) => n(out[f]) === 0);
-    if (everyDateFailed && everyNumberZero) {
+    // Otherwise only junk when there is nothing identifying in it either.
+    const requiredAllBlank = (def.required ?? []).every((f) => String(out[f] ?? '').trim() === '');
+    if (everyDateFailed && everyNumberZero && requiredAllBlank) {
       // Not a record: no readable date anywhere and no money in it either.
       problems.push({ line, why: 'looks like a repeated header or divider row — skipped' });
       skipped++;
@@ -152,18 +175,24 @@ export function convert(sheet, table) {
       }
     }
 
-    out.id = rowKey(sheet, out);
+    const base = SHEETS[sheet].key.map((f) => String(out[f] ?? '').trim().toUpperCase()).join('|');
+    const seenBefore = (occurrences.get(base) ?? 0) + 1;
+    occurrences.set(base, seenBefore);
+    out.id = rowKey(sheet, out, seenBefore);
+    if (seenBefore > 1) repeats++;
     rows.push(out);
   });
 
-  // Two identical rows in the same export would collide on id.
-  const seen = new Map();
+  // Identical rows are kept — see rowKey(). Only a genuine id collision, which
+  // should now be impossible, would drop one.
+  const seen = new Set();
   const unique = [];
   for (const r of rows) {
-    if (seen.has(r.id)) { problems.push({ line: 0, why: `duplicate row ignored: ${describe(sheet, r)}` }); continue; }
-    seen.set(r.id, true);
+    if (seen.has(r.id)) { problems.push({ line: 0, why: `two rows produced the same id, one ignored: ${describe(sheet, r)}` }); continue; }
+    seen.add(r.id);
     unique.push(r);
   }
+  if (repeats) notes.push(`${repeats} row(s) are identical to another row — kept, because a repeated sale is a real sale`);
 
   if (carried) notes.push(`${carried} row(s) had no date of their own and took the date from the row above`);
   for (const note of notes) problems.push({ line: 0, why: note, note: true });
@@ -297,8 +326,21 @@ export function run({ dir = IMPORT_DIR, into = null, write = false } = {}) {
     say('');
   }
 
-  if (allProblems.length) {
-    say(`## Things to look at (${allProblems.length})`);
+  const notes = allProblems.filter((p) => p.note);
+  const realProblems = allProblems.filter((p) => !p.note);
+
+  if (notes.length) {
+    say('## What the importer had to work out for itself');
+    say('');
+    say('Not problems — decisions it made about your layout. Worth a glance to');
+    say('confirm they match how you actually keep the sheet.');
+    say('');
+    for (const nte of notes) say(`- **${nte.file}** — ${nte.why}`);
+    say('');
+  }
+
+  if (realProblems.length) {
+    say(`## Things to look at (${realProblems.length})`);
     say('');
     say('Grouped, because the same issue repeated 200 times tells you nothing');
     say('extra. Each group shows the first few line numbers.');
@@ -311,7 +353,7 @@ export function run({ dir = IMPORT_DIR, into = null, write = false } = {}) {
       .replace(/\b\d[\d.,]*\b/g, 'N');
 
     const groups = new Map();
-    for (const p of allProblems) {
+    for (const p of realProblems) {
       const key = `${p.file}|${kindOf(p.why)}`;
       const g = groups.get(key) ?? { file: p.file, why: kindOf(p.why), lines: [], examples: [] };
       if (p.line) g.lines.push(p.line);
@@ -339,7 +381,7 @@ export function run({ dir = IMPORT_DIR, into = null, write = false } = {}) {
   writeFileSync(join(dir, 'report.md'), report);
   if (write) writeFileSync(join(dir, 'timelink-import.json'), JSON.stringify(store, null, 0));
 
-  return { store, files: summary, problems: allProblems, report };
+  return { store, files: summary, problems: allProblems, notes, realProblems, report };
 }
 
 // Only run when this file IS the command, not when it is imported.
@@ -352,8 +394,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const args = process.argv.slice(2);
   const into = args.includes('--into') ? args[args.indexOf('--into') + 1] : null;
   const write = args.includes('--write');
-  const { files, problems } = run({ into, write });
-  console.log(`read ${files.length} file(s), ${problems?.length ?? 0} thing(s) to look at`);
+  const { files, realProblems, notes } = run({ into, write });
+  const rows = files.reduce((a, f) => a + (f.added ?? 0), 0);
+  console.log(`read ${files.length} file(s), ${rows} new row(s)`);
+  console.log(`${realProblems?.length ?? 0} thing(s) to look at, ${notes?.length ?? 0} note(s) about your layout`);
   console.log('report written to import/report.md');
   if (write) console.log('backup written to import/timelink-import.json');
   else console.log('(add --write to also produce the backup file)');

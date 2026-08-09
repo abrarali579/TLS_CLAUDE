@@ -31,6 +31,7 @@ export function switchView(v){
   const item=NAV.find(x=>x.v===v)||NAV.find(x=>x.v);
   if(!item)return;
   $$('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===item.v));
+  $$('#mobilebar button').forEach(b=>b.classList.toggle('on',b.dataset.v===item.v));
   $('#vtitle').textContent=item.t;
   $('#vsub').textContent='· '+item.s;
   try{item.f();}catch(e){
