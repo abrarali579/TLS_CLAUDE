@@ -47,7 +47,7 @@ jobs:
           echo "OK — $(du -h "$FILE" | cut -f1) self-contained"
 
       - name: Attach the built app to this run
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TimeLink-Suite
           path: dist/TimeLink-Suite.html
@@ -82,7 +82,7 @@ jobs:
 
       - name: Keep the report when something fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
