@@ -11,9 +11,15 @@
  * those fields, so importing twice does not create two copies. Choose fields
  * that together identify a row, and that nobody edits afterwards.
  */
+/**
+ * Tabs that are not records — a dashboard, a summary, a data-entry form, a
+ * legend. Skipped quietly instead of being reported as unrecognised.
+ */
+export const NOT_DATA = /dashboard|overview|summary|report|chart|pivot|readme|instruction|learn|legend|help|_entry$|.?entry.?form/i;
+
 export const SHEETS = {
   transactions: {
-    match: /transaction|data.?entry|entries|daily|work.?sheet/i,
+    match: /transaction|data.?ent[er]{2}y|data.?entry|entries|daily|work.?sheet/i,
     label: 'Data Entry / transactions',
     columns: {
       date:     ['date', 'entry date'],
@@ -21,7 +27,9 @@ export const SHEETS = {
       employee: ['employee', 'staff', 'worker', 'name'],
       work:     ['work', 'service', 'task', 'work item', 'description'],
       received: ['received', 'amount received', 'receipt', 'income'],
-      expense:  ['expense', 'cost', 'expenses', 'govt', 'government'],
+      // 'TOTAL EXP' and 'EXPENSE' are the totals; FEE and AMER are its parts,
+      // so match the total and leave the components alone.
+      expense:  ['total exp', 'expense', 'expenses', 'cost'],
       profit:   ['profit', 'margin', 'net'],
       paidFrom: ['paidfrom', 'paid from', 'account', 'source', 'paid by'],
     },
@@ -38,10 +46,14 @@ export const SHEETS = {
     label: 'Payments received',
     columns: {
       date:    ['date', 'payment date'],
-      amount:  ['amount', 'paid', 'received'],
-      company: ['company', 'client', 'customer', 'company name'],
-      account: ['account', 'received into', 'bank', 'paid into'],
-      remark:  ['remark', 'remarks', 'note', 'notes', 'description'],
+      // "AMAOUNT" is misspelled in the real workbook. Note that 'received' is
+      // deliberately NOT here: the payments tab has a second table beside the
+      // first, with its own RECEIVED column, and matching that would import
+      // the advance-balance figures as payment amounts.
+      amount:  ['amaount', 'amount', 'paid'],
+      company: ['company name', 'company', 'client', 'customer'],
+      account: ['received into', 'paid into', 'account', 'bank'],
+      remark:  ['remarks', 'remark', 'note', 'notes', 'description'],
     },
     dates: ['date'],
     numbers: ['amount'],
@@ -150,14 +162,29 @@ export const SHEETS = {
       inception: ['inception', 'start', 'from', 'issue date'],
       expiry:    ['expiry', 'expires', 'to', 'end'],
       category:  ['category', 'type', 'class'],
-      invoiceNo: ['invoiceno', 'invoice no'],
-      premium:   ['premium', 'amount'],
-      total:     ['total', 'grand total'],
+      invoiceNo: ['tax invoice no', 'invoiceno', 'invoice no'],
+      premium:   ['premium'],
+      total:     ['total premium', 'grand total', 'total'],
     },
     dates: ['inception', 'expiry'],
     numbers: ['premium', 'total'],
     required: ['worker'],
     key: ['company', 'worker', 'inception', 'expiry'],
+  },
+
+  taskTemplates: {
+    match: /service.?template|task.?template|package/i,
+    label: 'Service templates',
+    columns: {
+      serviceType: ['servicetype', 'service type', 'service', 'package'],
+      sr:          ['sr', 'sr no', 'serial', 'line', '#'],
+      desc:        ['desc', 'description', 'item', 'task'],
+      qty:         ['qty', 'quantity', 'nos'],
+      rate:        ['rate', 'price', 'amount'],
+    },
+    numbers: ['qty', 'rate'],
+    required: ['serviceType'],
+    key: ['serviceType', 'sr', 'desc'],
   },
 
   visa: {
@@ -170,5 +197,7 @@ export const SHEETS = {
     },
     required: ['employee'],
     key: ['company', 'employee'],
+    // Every remaining tick-box column becomes one step in the tracker.
+    booleanGroup: { field: 'steps', exclude: ['PROGRESS', 'DATE STARTED', 'ACTIVE', 'COMPLETED'] },
   },
 };

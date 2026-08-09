@@ -17,8 +17,8 @@ import { pathToFileURL } from 'node:url';
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
-import { parseTable, findColumn } from './csv.mjs';
-import { SHEETS } from './schema.mjs';
+import { parseTable, findColumn, findUnnamedDateColumn } from './csv.mjs';
+import { SHEETS, NOT_DATA } from './schema.mjs';
 import { parseAnyDate } from '../../src/lib/dates.js';
 import { n } from '../../src/lib/format.js';
 
@@ -33,6 +33,7 @@ export function rowKey(sheet, row) {
 /** Which sheet type is this file? */
 export function classify(filename) {
   const name = basename(filename, '.csv');
+  if (NOT_DATA.test(name)) return 'skip';
   for (const [key, def] of Object.entries(SHEETS)) if (def.match.test(name)) return key;
   return null;
 }
@@ -49,27 +50,93 @@ export function convert(sheet, table) {
     if (col) mapping[field] = col;
     else if ((def.required ?? []).includes(field)) missing.push(field);
   }
+
+  // A date column with no heading — typed straight into column A each day.
+  let dateColumnIndex = null;
+  const notes = [];
+  for (const field of def.dates ?? []) {
+    if (mapping[field] || !(def.required ?? []).includes(field)) continue;
+    const found = findUnnamedDateColumn(
+      table.headers,
+      table.rows.map((r) => ({ cells: r.__cells })),
+      (v) => Boolean(parseAnyDate(v))
+    );
+    if (found) {
+      dateColumnIndex = { field, index: found.index };
+      mapping[field] = `column ${found.index + 1} (no heading — dates)`;
+      missing.splice(missing.indexOf(field), 1);
+      notes.push(`used column ${found.index + 1}, which has no heading, for ${field} — ${Math.round(found.ratio * 100)}% of its values read as dates`);
+    }
+  }
   if (missing.length) {
-    return { rows: [], mapping, problems: [{ line: 0, why: `no column found for: ${missing.join(', ')}` }], skipped: table.rows.length };
+    // Say what WAS found, otherwise "no column found for: date" leaves you
+    // guessing whether the file is wrong or the header row was misread.
+    const seen = table.headers.filter((h) => h !== '').join(' | ') || '(no headings found)';
+    return {
+      rows: [], mapping, skipped: table.rows.length,
+      problems: [{
+        line: 0,
+        why: `no column found for: ${missing.join(', ')}. The headings read at line ${table.headerLine} were: ${seen}`,
+      }],
+    };
   }
 
   const rows = [];
   let skipped = 0;
+  let lastDate = '';
+  let carried = 0;
 
   table.rows.forEach((raw) => {
     const line = raw.__line; // the row number the spreadsheet shows
     const out = {};
     for (const [field, col] of Object.entries(mapping)) out[field] = raw[col] ?? '';
+    if (dateColumnIndex) out[dateColumnIndex.field] = raw.__cells?.[dateColumnIndex.index] ?? '';
+
+    // Tick-box columns (the visa tracker) become one object of step -> done.
+    if (def.booleanGroup) {
+      const used = new Set(Object.values(mapping));
+      const steps = {};
+      for (const h of table.headers) {
+        if (!h || used.has(h) || (def.booleanGroup.exclude ?? []).some((x) => h.toUpperCase().includes(x.toUpperCase()))) continue;
+        steps[h] = /^(true|yes|y|1|done|✓)$/i.test(String(raw[h] ?? '').trim());
+      }
+      if (Object.keys(steps).length) out[def.booleanGroup.field] = steps;
+    }
 
     // A row with nothing in any mapped column is padding, not data.
     if (Object.values(out).every((v) => String(v).trim() === '')) { skipped++; return; }
 
+    // Long spreadsheets repeat their header row every so often, and those
+    // rows arrive looking like data. Read the values first, then decide.
+    const dateTries = [];
     for (const f of def.dates ?? []) {
       const before = out[f];
       out[f] = parseAnyDate(before);
-      if (before && !out[f]) problems.push({ line, why: `could not read the date "${before}"` });
+      if (before) dateTries.push({ f, before, ok: Boolean(out[f]) });
     }
     for (const f of def.numbers ?? []) out[f] = n(out[f]);
+
+    const everyDateFailed = dateTries.length > 0 && dateTries.every((d) => !d.ok);
+    const everyNumberZero = (def.numbers ?? []).length > 0 && (def.numbers ?? []).every((f) => n(out[f]) === 0);
+    if (everyDateFailed && everyNumberZero) {
+      // Not a record: no readable date anywhere and no money in it either.
+      problems.push({ line, why: 'looks like a repeated header or divider row — skipped' });
+      skipped++;
+      return;
+    }
+
+    // A date entered once at the top of the day, with the rows beneath left
+    // blank, is normal in a hand-kept sheet. Carry it down rather than losing
+    // those rows — and count how often, so it can be sanity-checked.
+    for (const f of def.dates ?? []) {
+      if (!(def.required ?? []).includes(f)) continue;
+      if (out[f]) lastDate = out[f];
+      else if (lastDate) { out[f] = lastDate; carried++; }
+    }
+
+    for (const d of dateTries) {
+      if (!d.ok) problems.push({ line, why: `could not read the date "${d.before}"` });
+    }
 
     for (const f of def.required ?? []) {
       if (String(out[f] ?? '').trim() === '') { problems.push({ line, why: `${f} is empty` }); skipped++; return; }
@@ -97,6 +164,9 @@ export function convert(sheet, table) {
     seen.set(r.id, true);
     unique.push(r);
   }
+
+  if (carried) notes.push(`${carried} row(s) had no date of their own and took the date from the row above`);
+  for (const note of notes) problems.push({ line: 0, why: note, note: true });
 
   return { rows: unique, mapping, problems, skipped };
 }
@@ -162,12 +232,16 @@ export function run({ dir = IMPORT_DIR, into = null, write = false } = {}) {
 
   for (const file of files.sort()) {
     const sheet = classify(file);
+    if (sheet === 'skip') {
+      summary.push({ file, sheet: 'skip', label: 'not a data tab — skipped', added: 0, kept: 0, skipped: 0, problems: 0 });
+      continue;
+    }
     if (!sheet) {
       summary.push({ file, sheet: '—', added: 0, kept: 0, skipped: 0, problems: 1 });
       allProblems.push({ file, line: 0, why: 'could not tell which tab this is from the filename' });
       continue;
     }
-    const table = parseTable(readFileSync(join(dir, file), 'utf8'));
+    const table = parseTable(readFileSync(join(dir, file), 'utf8'), SHEETS[sheet].columns);
     const { rows, mapping, problems, skipped } = convert(sheet, table);
     const { rows: merged, added, kept } = merge(store[sheet] ?? [], rows);
     store[sheet] = merged;
@@ -184,6 +258,16 @@ export function run({ dir = IMPORT_DIR, into = null, write = false } = {}) {
     say(`| ${s.file} | ${s.label ?? s.sheet} | ${s.added} | ${s.kept} | ${s.skipped} | ${s.problems} |`);
   }
   say('');
+
+  const emptyFiles = summary.filter((x) => x.sheet !== 'skip' && x.added === 0 && x.kept === 0);
+  if (emptyFiles.length) {
+    say('## Nothing was read from these files');
+    say('');
+    say('This is the part to fix first — these tabs contributed no rows at all.');
+    say('');
+    for (const f of emptyFiles) say(`- **${f.file}** (${f.label ?? f.sheet}) — ${f.skipped} row(s) skipped`);
+    say('');
+  }
 
   say('## Column mapping');
   say('');
@@ -216,12 +300,33 @@ export function run({ dir = IMPORT_DIR, into = null, write = false } = {}) {
   if (allProblems.length) {
     say(`## Things to look at (${allProblems.length})`);
     say('');
-    say('None of these stopped the import. They are rows worth a human glance.');
+    say('Grouped, because the same issue repeated 200 times tells you nothing');
+    say('extra. Each group shows the first few line numbers.');
     say('');
-    for (const p of allProblems.slice(0, 200)) {
-      say(`- **${p.file}**${p.line ? ` line ${p.line}` : ''} — ${p.why}`);
+
+    // "could not read the date \"784199...\"" and the same for another id are
+    // the same problem, so strip the specific value before grouping.
+    const kindOf = (why) => why
+      .replace(/"[^"]*"/g, '"…"')
+      .replace(/\b\d[\d.,]*\b/g, 'N');
+
+    const groups = new Map();
+    for (const p of allProblems) {
+      const key = `${p.file}|${kindOf(p.why)}`;
+      const g = groups.get(key) ?? { file: p.file, why: kindOf(p.why), lines: [], examples: [] };
+      if (p.line) g.lines.push(p.line);
+      if (g.examples.length < 3) g.examples.push(p.why);
+      groups.set(key, g);
     }
-    if (allProblems.length > 200) say(`- …and ${allProblems.length - 200} more`);
+
+    for (const g of [...groups.values()].sort((a, b) => b.lines.length - a.lines.length)) {
+      const where = g.lines.length
+        ? ` — ${g.lines.length} row(s), first at line ${g.lines.slice(0, 5).join(', ')}${g.lines.length > 5 ? '…' : ''}`
+        : '';
+      say(`- **${g.file}**${where}`);
+      say(`  - ${g.examples[0]}`);
+      if (g.examples[1] && g.examples[1] !== g.examples[0]) say(`  - ${g.examples[1]}`);
+    }
     say('');
   } else {
     say('## Things to look at');
@@ -242,7 +347,8 @@ export function run({ dir = IMPORT_DIR, into = null, write = false } = {}) {
 // argv[1] is "D:\\path\\file.mjs" while import.meta.url is
 // "file:///D:/path/file.mjs" — they never match, so the command does nothing
 // at all and prints nothing to explain why. pathToFileURL does it properly.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// `node -e "import(...)"` has no argv[1] at all, so check before converting.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
   const into = args.includes('--into') ? args[args.indexOf('--into') + 1] : null;
   const write = args.includes('--write');

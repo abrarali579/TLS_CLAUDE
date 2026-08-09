@@ -67,7 +67,8 @@ export function findUndeclared(dir = 'src') {
 // argv[1] is "D:\\path\\file.mjs" while import.meta.url is
 // "file:///D:/path/file.mjs" — they never match, so the command does nothing
 // at all and prints nothing to explain why. pathToFileURL does it properly.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// `node -e "import(...)"` has no argv[1] at all, so check before converting.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const problems = findUndeclared(process.argv[2] || 'src');
   if (!problems.length) { console.log('OK — every name is declared, imported, or a known global'); process.exit(0); }
   for (const p of problems) console.error(`${p.file}:${p.line ?? '?'}  ${p.name} is not defined${p.detail ? ' — ' + p.detail : ''}`);

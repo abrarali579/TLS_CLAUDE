@@ -64,7 +64,8 @@ export function depsOf(mod, decls, name) {
 // argv[1] is "D:\\path\\file.mjs" while import.meta.url is
 // "file:///D:/path/file.mjs" — they never match, so the command does nothing
 // at all and prints nothing to explain why. pathToFileURL does it properly.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// `node -e "import(...)"` has no argv[1] at all, so check before converting.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [file, ...rest] = process.argv.slice(2);
   const mod = load(file);
   const decls = topLevel(mod);
