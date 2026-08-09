@@ -50,7 +50,8 @@ Short version:
 
 ```powershell
 npm run dev      # live preview while editing
-npm test         # 74 tests, about 12 seconds
+npm test         # 121 tests, about 13 seconds
+npm run check    # instant sanity check on imports
 npm run build    # ship it
 ```
 
@@ -64,14 +65,17 @@ and none of them end up in the shipped file.
 
 ```
 src\
-  index.html      page shell, styles, seed data
-  main.js         the bulk of the app (shrinks as code is extracted)
-  lib\format.js   numbers, money, escaping
-  lib\dates.js    date reading and display
-  core\store.js   D — the live data store
-  domain\rates.js pricing
-test\             74 tests
-dist\             build output (gitignored)
+  index.html   page shell, styles, seed data
+  main.js      the bulk of the app (shrinks as code is extracted)
+  lib\         format, dates, dom, csv
+  core\        store (D), persist (IndexedDB), seed
+  domain\      accounts, invoices, statement, vat, ageing, partners,
+               recurring, employees, rates, rows, lists, dashboard
+  ui\          toast, modal, forms, grid, autocomplete, download, pdf, theme
+test\          121 tests (simulated browser)
+e2e\           real-Chrome tests
+tools\         safe code-extraction helpers
+dist\          build output (gitignored)
 ```
 
 Inside the app, a `switchView()` router activates a screen and calls its
@@ -92,8 +96,9 @@ Easy to break by accident, expensive when broken:
 
 ## Automation
 
-Every push runs the tests, builds the app, checks the output is genuinely
-self-contained, and attaches it to the run as a download. Nothing is published
+Every push checks imports, builds the app, runs 121 tests, runs the
+real-browser tests in Chrome, verifies the output is genuinely self-contained,
+and attaches it to the run as a download. Nothing is published
 if a test fails. Dependabot proposes build-tool updates monthly and CI tests
 each one.
 
@@ -101,6 +106,7 @@ Grab the latest tested build from **Actions → newest run → Artifacts**.
 
 ## Status
 
-Modularization is in progress. `src\main.js` is still large; code moves out one
-module at a time, with the full suite green after each move. See BUILD.md for
-why the original `TimeLink-Suite.html` is still in the repo root.
+Modularization is in progress. 29 modules are extracted; `src\main.js` still
+holds the screen-rendering code. Code moves out one module at a time, with the
+full suite green after each move. See BUILD.md for why the original
+`TimeLink-Suite.html` is still in the repo root.

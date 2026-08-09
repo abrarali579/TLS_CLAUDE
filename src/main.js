@@ -3,15 +3,40 @@ import { MON, fmtDate, today, daysAgo, parseClipTable, parseAnyDate } from './li
 import { D, setD } from './core/store.js';
 import { rateMap, rateBust, findRate, invoiceRate } from './domain/rates.js';
 
+import { $, $$, debounce, el } from './lib/dom.js';
+import { csv } from './lib/csv.js';
+import { accentFor, setTheme } from './ui/theme.js';
+import { toast, toastUndo } from './ui/toast.js';
+import { dl } from './ui/download.js';
+import { field, input, mkBtn, pillControl } from './ui/forms.js';
+import { modal } from './ui/modal.js';
+import { DB, FILE_STORE, MAX_FILE, ST, _saveWarned, _t, audit, fdb, fileDel, fileGet, filePut, idb, kvGet, kvSet, publishD, save } from './core/persist.js';
+import { AC_ADD, acAdd, acHide, acI, acKeys, acNav, acOpen, acPick, acPicking, acPlace, acShow, acT, acX, bindAC } from './ui/autocomplete.js';
+import { bindPaste, bindRowLock, focusCell, gridCells, gridKey, lockRow, maxRow, unlockRow } from './ui/grid.js';
+import { SS, allCompanies, buildStatement, companyEntries, setSS } from './domain/statement.js';
+import { DOC_TYPES, LINE_ROWS, blankInvoice, docCfg, docPrefix, findInvoice, invMismatch, invTotals, nextInvNo, normDate, parseInvNo, yymm } from './domain/invoices.js';
+import { partnerData } from './domain/partners.js';
+import { FREQ, advanceDate, dueRecurring, newRecurring, postAllDue, postRecurring } from './domain/recurring.js';
+import { employeeHistory, employeeList, employeeStats, workList } from './domain/employees.js';
+import { ACC_FALLBACK, PALETTE, accColor, accMeta, accSettleNames, accountBalances, accountMovements, accountNames, companyBalances } from './domain/accounts.js';
+import { periodLabel, quarterOf, vatDetail, vatPeriods, vatRate, vatRows } from './domain/vat.js';
+import { AGE_BUCKETS, ageAll, ageCompany, daysBetween } from './domain/ageing.js';
+import { SEED, freshSeed, migrate } from './core/seed.js';
+import { COL, SPARE, isBlankCB, isBlankExp, isBlankPay, isBlankTx, monthKey, newCB, newExp, newPay, newTx } from './domain/rows.js';
+import { XFER_PREFIX, accountPick, cbPickList, companyMatch, customerNames, expCategories, itemNames, serviceTypes } from './domain/lists.js';
+import { attachCount, attachmentsFor } from './domain/attachments.js';
+import { waNumber } from './domain/whatsapp.js';
+import { PDF_CSS, PDF_LOGO, openPDF, pdfBank, pdfHeader } from './ui/pdf.js';
+import { AF, DR, autoRange, dayspan, inRange, setAF, setDR, trendPoints } from './domain/dashboard.js';
 /* =========================================================
    TIME LINK Business Suite — Phases 1-3
    Ported from the TimeLink Google Sheet + Apps Script modules
    ========================================================= */
-const SEED = JSON.parse(document.getElementById('seedjson').textContent);
-const DB='timelink_db', ST='kv';
+
+
 
 /* mirrored onto window so tooling and tests can inspect state */
-function publishD(){try{window.D=D;}catch(e){}}
+
 
 /* ---------- IndexedDB ---------- */
 /* Both stores live in one database, opened at the SAME version everywhere (2).
@@ -20,43 +45,16 @@ function publishD(){try{window.D=D;}catch(e){}}
    every later open(DB,1) call here threw VersionError and silently broke save()
    and boot() for good. Stores are created idempotently so both a fresh database
    and one upgraded from the old version-1 shape end up with everything present. */
-function idb(){return new Promise((res,rej)=>{const r=indexedDB.open(DB,2);
-  r.onupgradeneeded=()=>{
-    const db=r.result;
-    if(!db.objectStoreNames.contains(ST))db.createObjectStore(ST);
-    if(!db.objectStoreNames.contains('files'))db.createObjectStore('files');
-  };
-  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
-async function kvGet(k){const db=await idb();return new Promise(r=>{const q=db.transaction(ST).objectStore(ST).get(k);
-  q.onsuccess=()=>r(q.result);q.onerror=()=>r(undefined);});}
-async function kvSet(k,v){const db=await idb();return new Promise(r=>{const t=db.transaction(ST,'readwrite');
-  t.objectStore(ST).put(v,k);t.oncomplete=()=>r();});}
-let _t=null,_saveWarned=false;
-function save(){
-  publishD();clearTimeout(_t);
-  _t=setTimeout(()=>{
-    kvSet('data',D).catch(()=>{
-      // a rejected write used to vanish silently — the user would keep
-      // working with no idea their changes stopped being saved to disk
-      if(!_saveWarned){_saveWarned=true;
-        try{toast('Could not save to local storage — recent changes may be lost if you close this tab.',1);}catch(e){}}
-    });
-  },350);
-}
+
+
+
+
+
 
 /* ---------- audit trail (Phase 6) ---------- */
-function audit(action,what,detail,before,after){
-  if(!D)return;
-  D.audit=D.audit||[];
-  D.audit.unshift({ts:new Date().toISOString(),action,what,detail:String(detail||''),
-    before:before===undefined?null:before,after:after===undefined?null:after});
-  if(D.audit.length>800)D.audit.length=800;
-}
+
 
 /* ---------- utils ---------- */
-const $=s=>document.querySelector(s);
-const $$=s=>[...document.querySelectorAll(s)];
-function el(t,c,x){const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e;}
 
 
 
@@ -66,25 +64,12 @@ function el(t,c,x){const e=document.createElement(t);if(c)e.className=c;if(x!==u
 
 
 
-function toast(msg,err){
-  const t=$('#toast');$('#tmsg').textContent=msg;t.classList.toggle('err',!!err);
-  const u=$('#tundo');if(u)u.remove();
-  t.classList.add('on');clearTimeout(toast._x);toast._x=setTimeout(()=>t.classList.remove('on'),2200);
-}
+
+
+
+
 /* toast with an Undo button, used by quick-add */
-function toastUndo(msg,undoFn,ms){
-  const t=$('#toast');$('#tmsg').textContent=msg;t.classList.remove('err');
-  const old=$('#tundo');if(old)old.remove();
-  const b=el('button',null,'Undo');b.id='tundo';
-  b.style.cssText='margin-left:4px;border:1px solid var(--stroke-2);background:transparent;color:var(--brand2);'+
-    'font-weight:800;font-size:11.5px;padding:3px 10px;border-radius:99px;cursor:pointer;pointer-events:auto';
-  b.onclick=()=>{undoFn();b.remove();t.classList.remove('on');};
-  t.append(b);
-  t.style.pointerEvents='auto';
-  t.classList.add('on');
-  clearTimeout(toast._x);
-  toast._x=setTimeout(()=>{t.classList.remove('on');t.style.pointerEvents='none';b.remove();},ms||5000);
-}
+
 
 /* =========================================================
    QUICK ADD — a typed value that is not in the master list
@@ -120,276 +105,65 @@ function quickAddEmployee(name,company){
     D.employees=D.employees.filter(e=>e.name!==v);save();toast(`Removed "${v}"`);
   });
 }
-function accentFor(label){return (D.settings.paidFromOptions||[]).find(o=>o.label===label)||null;}
-function debounce(fn,ms){let h;return(...a)=>{clearTimeout(h);h=setTimeout(()=>fn(...a),ms||250);};}
+
+
 
 /* ---------- theme ---------- */
-function setTheme(t){
-  document.documentElement.setAttribute('data-theme',t);
-  $('#ticon').textContent = t==='dark'?'☾':'☀';
-  $('#tlabel').textContent = t==='dark'?'Dark':'Light';
-  try{localStorage.setItem('tl_theme',t);}catch(e){}
-}
+
 $('#tbtn').onclick=()=>{
   const cur=document.documentElement.getAttribute('data-theme');
   setTheme(cur==='dark'?'light':'dark');
 };
 
 /* ---------- autocomplete ---------- */
-const AC_ADD='\u0000ADD';   // sentinel row meaning "create this value"
-let acT=null,acI=[],acX=-1,acAdd=null;
+   // sentinel row meaning "create this value"
+
 /* position the panel against its anchor; called on open AND on every scroll */
-function acPlace(){
-  if(!acT)return;
-  const b=$('#ac'),r=acT.getBoundingClientRect();
-  // anchor scrolled out of sight → close
-  if(r.bottom<0||r.top>innerHeight||r.right<0||r.left>innerWidth){acHide();return;}
-  const w=Math.max(r.width,230);
-  b.style.width=w+'px';
-  b.style.left=Math.max(8,Math.min(r.left,innerWidth-w-14))+'px';
-  const h=b.offsetHeight;
-  b.style.top=(r.bottom+h>innerHeight-10 && r.top-h-4>0 ? r.top-h-4 : r.bottom+4)+'px';
-}
-function acShow(inp,list,showAll){
-  acT=inp;
-  const raw=inp.value.trim();
-  const q=showAll?'':raw.toUpperCase();
-  acI=list.filter(x=>x&&String(x).toUpperCase().includes(q)).slice(0,60);
-  // offer to create the typed value when it is genuinely new
-  acAdd=null;
-  const opts=inp._acOpts||{};
-  if(opts.onAdd&&raw&&!list.some(x=>String(x).trim().toUpperCase()===raw.toUpperCase())){
-    acAdd=raw;acI.push(AC_ADD);           // always last, after any partial matches
-  }
-  const b=$('#ac');
-  if(!acI.length){acHide();return;}
-  b.innerHTML='';
-  // preselect the add row only when nothing else matched
-  acX=(acAdd&&acI.length===1)?0:-1;
-  acI.forEach((x,i)=>{
-    const isAdd=x===AC_ADD;
-    const d=el('div',isAdd?'acadd':null);
-    if(isAdd){d.innerHTML=`<b>+ Add</b> "${esc(acAdd)}"<span class="k">Enter</span>`;}
-    else d.textContent=x;
-    if(i===acX)d.classList.add('sel');
-    d.onmousedown=e=>{e.preventDefault();acPick(i);};
-    b.appendChild(d);
-  });
-  b.style.display='block';
-  acPlace();
-}
-function acHide(){$('#ac').style.display='none';acT=null;acI=[];acX=-1;acAdd=null;}
-function acOpen(){return $('#ac').style.display==='block';}
-let acPicking=false;
-function acPick(i){
-  if(!acT||!acI[i])return;
-  const inp=acT;
-  const isAdd=acI[i]===AC_ADD;
-  const val=isAdd?acAdd:acI[i];
-  const opts=inp._acOpts||{};
-  inp.value=val;
-  acHide();
-  if(isAdd&&opts.onAdd)opts.onAdd(val,inp);
-  /* The input event below is what the row handlers listen to, but it also
-     reaches this field's own search handler — which would reopen the panel
-     we just closed. Suppress that one pass. */
-  acPicking=true;
-  inp.dispatchEvent(new Event('input',{bubbles:true}));
-  inp.dispatchEvent(new Event('change',{bubbles:true}));
-  acPicking=false;
-  acHide();
-  if(inp._acPick)inp._acPick(val,inp);
-}
-function acNav(d){
-  if(!acI.length)return;
-  acX = acX<0 ? (d>0?0:acI.length-1) : (acX+d+acI.length)%acI.length;
-  [...$('#ac').children].forEach((c,i)=>c.classList.toggle('sel',i===acX));
-  const sel=$('#ac').children[acX];
-  if(sel&&sel.scrollIntoView)try{sel.scrollIntoView({block:'nearest'});}catch(e){}
-}
+
+
+
+
+
+
+
 /* returns true when the keystroke was consumed by the dropdown */
-function acKeys(ev){
-  if(!acOpen())return false;
-  switch(ev.key){
-    case 'ArrowDown': ev.preventDefault();ev.stopPropagation();acNav(1);return true;
-    case 'ArrowUp':   ev.preventDefault();ev.stopPropagation();acNav(-1);return true;
-    case 'Enter':
-    case 'Tab':
-      if(acX>=0){ev.preventDefault();ev.stopPropagation();acPick(acX);return true;}
-      if(acAdd){                                   // typed a new name, nothing highlighted
-        ev.preventDefault();ev.stopPropagation();
-        acPick(acI.indexOf(AC_ADD));return true;
-      }
-      acHide();return false;
-    case 'Escape':    ev.preventDefault();acHide();return true;
-    default: return false;
-  }
-}
+
 /* Binds an autocomplete. IMPORTANT: this attaches the ONLY keydown listener that
    talks to the dropdown — callers must not also call acKeys, or every arrow press
    advances the highlight twice. Extra key handling goes in onKey. */
-function bindAC(inp,listFn,opts){
-  opts=opts||{};
-  inp.setAttribute('autocomplete','off');
-  inp._acPick=opts.onPick||null;
-  inp._acOpts=opts;
-  inp.addEventListener('input',()=>{if(acPicking)return;acShow(inp,listFn());});
-  /* Deliberately NOT opening on focus — arrowing through a grid would otherwise
-     throw a wall of names over the sheet. The list opens when you type, press
-     Down, or click the field. */
-  inp.addEventListener('focus',()=>{if(opts.fullList)inp.select();});
-  inp.addEventListener('click',()=>{
-    if(acOpen()&&acT===inp){acHide();return;}
-    if(opts.fullList)inp.select();
-    acShow(inp,listFn(),!!opts.fullList||!inp.value.trim());
-  });
-  inp.addEventListener('blur',()=>setTimeout(()=>{if(acT===inp)acHide();},150));
-  inp.addEventListener('keydown',ev=>{
-    if(acKeys(ev))return;
-    /* Alt+Down (or plain Down on a picker field) opens the list on demand */
-    if(!acOpen()&&ev.key==='ArrowDown'&&(opts.fullList||ev.altKey)){
-      ev.preventDefault();ev.stopPropagation();
-      if(opts.fullList)inp.select();
-      acShow(inp,listFn(),true);acNav(1);return;
-    }
-    if(opts.onKey)opts.onKey(ev);
-  });
-}
+
 /* keep the panel glued to its field while any container scrolls */
 document.addEventListener('scroll',()=>{if(acOpen())acPlace();},true);
 addEventListener('resize',()=>{if(acOpen())acPlace();});
 
 /* ---------- shared field builders ---------- */
-function field(label,node){const w=el('div','f');if(label)w.append(el('label','lb',label));w.append(node);return w;}
-function input(val,type,ph){const i=el('input','fld');i.type=type||'text';i.value=val??'';if(ph)i.placeholder=ph;return i;}
+
+
 
 /* A pill that behaves like an input for the autocomplete but is a plain span,
    so its height is entirely ours. An <input> carries intrinsic sizing that was
    stretching grid rows whenever the pill was empty. */
-function pillControl(cls){
-  const s=el('span',cls||'pf');
-  s.tabIndex=0;
-  Object.defineProperty(s,'value',{
-    get(){return s.dataset.val||'';},
-    set(v){s.dataset.val=v==null?'':String(v);s.textContent=s.dataset.val||'—';},
-    configurable:true
-  });
-  s.select=()=>{};
-  s.value='';
-  return s;
-}
+
 
 /* =========================================================
    GRID KEYBOARD NAVIGATION
    Every focusable cell carries data-r (row index) and data-c (column index).
    ========================================================= */
-function gridCells(scope){return [...scope.querySelectorAll('[data-nav]')];}
-function focusCell(scope,r,c){
-  const cells=gridCells(scope);
-  let best=null;
-  cells.forEach(x=>{
-    if(+x.dataset.r===r&&+x.dataset.c===c)best=x;
-  });
-  if(!best){ // fall back to nearest column on that row
-    const inRow=cells.filter(x=>+x.dataset.r===r);
-    if(inRow.length)best=inRow.reduce((a,b)=>Math.abs(+b.dataset.c-c)<Math.abs(+a.dataset.c-c)?b:a);
-  }
-  if(best){
-    best.focus();
-    if(best.select)try{best.select();}catch(e){}
-    if(best.scrollIntoView)try{best.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}
-    return true;}
-  return false;
-}
-function maxRow(scope){return gridCells(scope).reduce((a,x)=>Math.max(a,+x.dataset.r),0);}
+
+
+
 
 /* =========================================================
    ROW LOCKING
    A row that already holds data is read-only until you double-click it.
    Blank spare rows stay immediately typeable so entry is never slowed down.
    ========================================================= */
-function lockRow(tr){
-  tr.classList.add('locked');
-  tr.querySelectorAll('.cell,.pf').forEach(i=>{i.readOnly=true;i.dataset.lock='1';});
-}
-function unlockRow(tr,focusEl){
-  tr.classList.remove('locked');
-  tr.querySelectorAll('[data-lock]').forEach(i=>{
-    if(i.dataset.k!=='profit')i.readOnly=false;
-    delete i.dataset.lock;
-  });
-  tr.classList.add('editing');
-  if(focusEl&&focusEl.focus){focusEl.focus();if(focusEl.select)try{focusEl.select();}catch(e){}}
-}
+
+
 /* Applies locking to a row and wires the double-click that releases it. */
-function bindRowLock(tr,isFilled){
-  if(!isFilled)return;
-  lockRow(tr);
-  tr.addEventListener('dblclick',ev=>{
-    if(!tr.classList.contains('locked'))return;
-    const t=ev.target.closest('.cell,.pf');
-    unlockRow(tr,t);
-  });
-  // a single click on a locked row just selects it, and hints how to edit
-  tr.addEventListener('click',ev=>{
-    if(!tr.classList.contains('locked'))return;
-    if(tr.dataset.hinted)return;
-    tr.dataset.hinted='1';
-    toast('Double-click the row to edit it');
-    setTimeout(()=>{delete tr.dataset.hinted;},4000);
-  });
-}
+
 /* Handles arrows / Enter / Home / End inside a grid. Returns true if consumed. */
-function gridKey(ev,scope,opts){
-  opts=opts||{};
-  const t=ev.target,r=+t.dataset.r,c=+t.dataset.c;
-  if(isNaN(r))return false;
-  /* The Paid-From pill is a <span>, not a text input, so it has no
-     selectionStart/selectionEnd at all (both undefined). Left/right arrows
-     used to silently do nothing on that column because atStart/atEnd came
-     out false and it isn't a <select> either. A span has no native arrow-key
-     behavior of its own though (unlike a real <select>, which needs plain
-     up/down reserved to change its value) — so only widen the "no text
-     caret" allowance to the left/right check, not the up/down one. */
-  const hasSelection=typeof t.selectionStart==='number';
-  const atStart=!hasSelection||(t.selectionStart===0&&t.selectionEnd===0);
-  const atEnd=!hasSelection||(t.selectionStart===t.value.length&&t.selectionEnd===t.value.length);
-  const isSel=t.tagName==='SELECT';
-  const blocksHorizNav=isSel||!hasSelection;
-  switch(ev.key){
-    case 'ArrowDown':
-      if(isSel&&!ev.altKey)return false;
-      ev.preventDefault();
-      if(r>=maxRow(scope)&&opts.onOverflow)opts.onOverflow();
-      else focusCell(scope,r+1,c);
-      return true;
-    case 'ArrowUp':
-      if(isSel&&!ev.altKey)return false;
-      ev.preventDefault();focusCell(scope,r-1,c);return true;
-    case 'ArrowLeft':
-      if(!blocksHorizNav&&!atStart)return false;
-      ev.preventDefault();
-      if(!focusCell(scope,r,c-1))focusCell(scope,r-1,99);
-      return true;
-    case 'ArrowRight':
-      if(!blocksHorizNav&&!atEnd)return false;
-      ev.preventDefault();
-      if(!focusCell(scope,r,c+1))focusCell(scope,r+1,0);
-      return true;
-    case 'Enter':
-      ev.preventDefault();
-      if(r>=maxRow(scope)&&opts.onOverflow)opts.onOverflow();
-      else focusCell(scope,r+1,c);
-      return true;
-    case 'Home':
-      if(!ev.ctrlKey)return false;
-      ev.preventDefault();focusCell(scope,0,0);return true;
-    case 'End':
-      if(!ev.ctrlKey)return false;
-      ev.preventDefault();focusCell(scope,maxRow(scope),0);return true;
-    default:return false;
-  }
-}
+
 
 /* =========================================================
    CLIPBOARD — paste a block of cells straight out of Google Sheets
@@ -399,28 +173,7 @@ function gridKey(ev,scope,opts){
 
 /* Wire paste onto a grid. cols: ordered field descriptors from column index 1.
    applyFn(rowIndex, colIndex, value) writes one cell; growFn() adds a row. */
-function bindPaste(scope,opts){
-  scope.addEventListener('paste',ev=>{
-    const t=ev.target;
-    if(!t||!t.dataset||t.dataset.nav!=='1')return;
-    const raw=(ev.clipboardData||window.clipboardData).getData('text');
-    const grid=parseClipTable(raw);
-    if(grid.length<=1&&grid[0]&&grid[0].length<=1)return;   // single value → normal paste
-    ev.preventDefault();
-    const r0=+t.dataset.r,c0=+t.dataset.c;
-    let written=0,rowsAdded=0;
-    grid.forEach((line,ri)=>{
-      const rowIdx=r0+ri;
-      while(rowIdx>maxRow(scope)){opts.grow();rowsAdded++;}
-      line.forEach((val,ci)=>{
-        if(opts.apply(rowIdx,c0+ci,String(val).trim()))written++;
-      });
-    });
-    opts.done&&opts.done();
-    toast(`Pasted ${grid.length} row${grid.length===1?'':'s'} · ${written} cells filled`+
-      (rowsAdded?` · ${rowsAdded} new rows`:''));
-  });
-}
+
 
 /* =========================================================
    RATE ENGINE
@@ -440,107 +193,25 @@ function bindPaste(scope,opts){
 
 
 /* ---------- modal ---------- */
-function modal(title,body,buttons){
-  const ov=el('div','modal-ov');
-  const box=el('div','modal glass');
-  const h=el('div','modal-h');h.append(el('b',null,title));
-  const x=el('button','btn ico','✕');x.onclick=close;h.append(x);
-  const b=el('div','modal-b');b.append(body);
-  const f=el('div','modal-f');
-  (buttons||[{label:'Close'}]).forEach(cfg=>{
-    const btn=el('button','btn '+(cfg.cls||''),cfg.label);
-    btn.onclick=()=>{if(cfg.fn){if(cfg.fn()===false)return;}close();};
-    f.append(btn);
-  });
-  box.append(h,b,f);ov.append(box);document.body.append(ov);
-  requestAnimationFrame(()=>ov.classList.add('on'));
-  const first=b.querySelector('input,select');if(first)setTimeout(()=>first.focus(),80);
-  function close(){ov.classList.remove('on');setTimeout(()=>ov.remove(),200);document.removeEventListener('keydown',esckey);}
-  function esckey(e){if(e.key==='Escape')close();}
-  document.addEventListener('keydown',esckey);
-  ov.onclick=e=>{if(e.target===ov)close();};
-  return{close};
-}
+
 
 /* ---------- brand PDF chrome (shared by statement + invoice) ---------- */
-const PDF_CSS=`
-@page{size:A4;margin:11mm}
-*{box-sizing:border-box}
-body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:10px;color:#16302f;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.sheet{position:relative}
-.hd{background:linear-gradient(115deg,#0b3b38 0%,#0f766e 55%,#134e4a 100%);color:#fff;padding:16px 20px;border-radius:10px;
-  display:flex;align-items:center;gap:14px}
-.hd .lg{width:46px;height:46px;flex:0 0 46px}
-.hd .nm{flex:1}
-.hd .nm h1{margin:0;font-size:16px;letter-spacing:2.2px;font-weight:800}
-.hd .nm p{margin:3px 0 0;font-size:9px;opacity:.88;line-height:1.5}
-.hd .rt{text-align:right;font-size:9px;opacity:.9;line-height:1.6}
-.ttl{margin:14px 0 4px;text-align:center;font-size:14px;font-weight:800;letter-spacing:2.4px;color:#0f766e}
-.ttl small{display:block;font-size:11px;color:#16302f;letter-spacing:1px;margin-top:4px;font-weight:700}
-.rule{height:2.5px;background:linear-gradient(90deg,#0f766e,#fbbf24 55%,transparent);border-radius:2px;margin:6px 0 12px}
-.meta{display:flex;justify-content:space-between;font-size:9px;color:#4b5f5e;margin-bottom:10px}
-table{border-collapse:collapse;width:100%}
-th{background:#0f766e;color:#fff;font-size:8.6px;letter-spacing:1px;text-transform:uppercase;padding:7px 6px;
-  border:1px solid #0b5f58;text-align:left}
-td{padding:6px;border:1px solid #d8e5e3;font-size:9.2px;vertical-align:middle}
-td.c{text-align:center;font-family:"Courier New",monospace}
-td.r{text-align:right;font-family:"Courier New",monospace}
-tr.alt td{background:#f5faf9}
-tr.pay td{background:#e6f7f2}
-tr.open td{background:#fef6e0;font-weight:700}
-tr.tot td{background:#0b3b38;color:#fff;font-weight:800;font-size:10px;border-color:#0b3b38}
-.bank{margin-top:20px;border:1px solid #d8e5e3;border-radius:8px;overflow:hidden}
-.bank .bh{background:#0b3b38;color:#fff;padding:6px 10px;font-size:9.5px;font-weight:800;letter-spacing:1.2px}
-.bank table td{border:0;border-bottom:1px solid #eef4f3;font-size:9px;padding:5px 10px}
-.bank table tr:last-child td{border-bottom:0}
-.bank .k{width:150px;font-weight:700;color:#0f766e}
-.foot{margin-top:14px;font-size:8.4px;color:#5a6d6c;line-height:1.7;border-top:1px solid #d8e5e3;padding-top:9px}
-.ty{text-align:center;font-style:italic;margin-top:9px;font-size:10px;color:#0f766e;font-weight:700}
-.stamp{position:absolute;top:120px;right:26px;transform:rotate(-14deg);border:3px solid;padding:5px 14px;
-  border-radius:7px;font-size:15px;font-weight:900;letter-spacing:2px;opacity:.16}
-`;
-const PDF_LOGO=`<svg class="lg" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect x="1.5" y="1.5" width="45" height="45" rx="13" fill="#ffffff" opacity=".14"/>
-<rect x="1.5" y="1.5" width="45" height="45" rx="13" stroke="#7fe6da" stroke-width="1.6"/>
-<circle cx="24" cy="24" r="14.5" stroke="#7fe6da" stroke-width="2.2" fill="none" opacity=".6"/>
-<path d="M24 14.5V24l7 4.2" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="24" cy="24" r="2.5" fill="#fbbf24"/><path d="M9 38.5h30" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-function pdfHeader(){
-  const S=D.settings;
-  return `<div class="hd">${PDF_LOGO}
-    <div class="nm"><h1>${esc(S.companyName)}</h1>
-      <p>${esc(S.address)}</p>
-      <p>${esc(S.phone)} &nbsp;·&nbsp; ${esc(S.email)} &nbsp;·&nbsp; TRN ${esc(S.trn)}</p></div>
-    <div class="rt">Tel 04 575 5373<br>Contact@timelink.ae<br>timelink.ae</div></div>`;
-}
-function pdfBank(){
-  const B=D.settings.bank;
-  return `<div class="bank"><div class="bh">BANK &amp; PAYMENT INFORMATION</div><table>
-    <tr><td class="k">BANK NAME</td><td>${esc(B.name)}</td></tr>
-    <tr><td class="k">ACCOUNT TITLE</td><td>${esc(B.title)}</td></tr>
-    <tr><td class="k">ACCOUNT NO</td><td>${esc(B.acc)}</td></tr>
-    <tr><td class="k">IBAN</td><td>${esc(B.iban)}</td></tr></table></div>`;
-}
-function openPDF(title,inner){
-  const w=window.open('','_blank');
-  if(!w){toast('Popup blocked — allow popups to export',1);return;}
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
-    <style>${PDF_CSS}</style></head><body><div class="sheet">${inner}</div>
-    <script>window.onload=function(){setTimeout(function(){window.print();},250);}<\/script></body></html>`);
-  w.document.close();
-}
+
+
+
+
+
 
 /* =========================================================
    DATA ENTRY  (mirrors FROM JAN 2026 sheet, cols A–H)
    Newest entries first, always five spare rows at the top.
    ========================================================= */
 let EF={from:'',to:'',q:''};
-const SPARE=5;
 
-const isBlankTx=r=>!r.company&&!r.employee&&!r.work&&!n(r.received)&&!n(r.expense)&&!r.paidFrom;
-function newTx(){return{id:uid(),date:today(),company:'',employee:'',work:'',
-  received:0,expense:0,profit:0,paidFrom:'',_s:Date.now()+Math.random()};}
+
+
+
 
 /* keep exactly SPARE blank rows at the end of the sheet */
 function topUpBlanks(){
@@ -818,7 +489,7 @@ function txRows(){
 }
 
 /* column order used by the keyboard navigator */
-const COL={date:1,company:2,employee:3,work:4,received:5,expense:6,profit:7,paidFrom:8};
+
 
 function txRow(r,rowIdx){
   const tr=el('tr');tr.dataset.id=r.id;
@@ -917,10 +588,8 @@ function applyWorkRate(r,cells,tr,rn,rowIdx){
 }
 function paintProfit(tr,r){const td=tr.children[7];td.classList.toggle('neg',n(r.profit)<0);
   td.querySelector('.cell').value=m0(r.profit);}
-function employeeList(){return [...new Set([...(D.employees||[]).map(e=>e.name),
-  ...D.transactions.map(t=>t.employee).filter(Boolean)])].sort();}
-function workList(){return [...new Set([...(D.rates||[]).map(r=>r.item),
-  ...D.transactions.map(t=>t.work).filter(Boolean)])].sort();}
+
+
 
 function addRow(){growEntry();}
 function exportTxCSV(){
@@ -930,7 +599,7 @@ function exportTxCSV(){
 }
 
 /* ---------- shared UI helpers ---------- */
-function mkBtn(parent,label,cls,fn){const b=el('button','btn '+(cls||''),label);b.onclick=fn;parent.append(b);return b;}
+
 function kpiRow(items){
   const k=el('div','kpis');
   items.forEach(o=>{
@@ -942,46 +611,17 @@ function kpiRow(items){
   });
   return k;
 }
-function csv(rows){return rows.map(r=>r.map(c=>{const s=String(c??'');
-  return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}).join(',')).join('\n');}
-function dl(blob,name){const a=el('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+name);}
+
+
 
 /* =========================================================
    STATEMENTS  (port of Apps Script #1)
    ========================================================= */
-let SS={company:'',from:'',to:''};
 
-function companyEntries(c){
-  const out=[];
-  D.transactions.forEach((t,i)=>{
-    if((t.company||'').trim()!==c)return;
-    const cost=n(t.received),work=(t.work||'').trim();
-    if(!work&&cost===0)return;
-    out.push({date:t.date,employee:(t.employee||'COMPANY WORK').trim()||'COMPANY WORK',work,cost,received:0,seq:i});
-  });
-  D.payments.forEach((p,i)=>{
-    if((p.company||'').trim()!==c)return;
-    const rec=n(p.amount);if(!rec)return;
-    out.push({date:p.date,employee:'PAYMENT RECEIVED',work:(p.remark||'PAYMENT RECEIVED').trim(),cost:0,received:rec,seq:1e5+i});
-  });
-  out.sort((a,b)=>a.date===b.date?a.seq-b.seq:String(a.date).localeCompare(String(b.date)));
-  return out;
-}
-function buildStatement(c,from,to){
-  const all=companyEntries(c);let rows,opening=null;
-  if(from&&to){
-    opening=all.filter(x=>x.date<from).reduce((a,x)=>a+x.received-x.cost,0);
-    rows=all.filter(x=>x.date>=from&&x.date<=to);
-  } else rows=all;
-  let bal=opening===null?0:opening;
-  const lines=rows.map(x=>{bal+=x.received-x.cost;return{...x,balance:Math.round(bal*100)/100};});
-  return{opening,lines,totalCost:rows.reduce((a,x)=>a+x.cost,0),
-    totalRec:rows.reduce((a,x)=>a+x.received,0),closing:Math.round(bal*100)/100};
-}
-function allCompanies(){
-  return [...new Set([...D.transactions.map(t=>t.company),...D.payments.map(p=>p.company)])].filter(Boolean).sort();
-}
+
+
+
+
 
 function renderStatement(){
   const T=$('#tools');T.innerHTML='';
@@ -1008,10 +648,10 @@ function renderStatement(){
   const fb=field('To',b);fb.style.flex='0 0 150px';
   r.append(fc,fq,fa,fb);
   const g=el('button','btn p','Generate');g.onclick=go;
-  const rs=el('button','btn','Reset');rs.onclick=()=>{SS={company:'',from:'',to:''};renderStatement();};
+  const rs=el('button','btn','Reset');rs.onclick=()=>{setSS({company:'',from:'',to:''});renderStatement();};
   r.append(g,rs);c.append(r);wrap.append(c);
   const out=el('div');out.id='stout';wrap.append(out);
-  function go(){SS={company:ci.value.trim(),from:a.value,to:b.value};drawStatement();}
+  function go(){setSS({company:ci.value.trim(),from:a.value,to:b.value});drawStatement();}
   if(SS.company)drawStatement();else drawStatement();
 }
 
@@ -1117,85 +757,34 @@ function exportStatementPDF(){
    TL + YYMM + NN numbering, task templates, rate lookup,
    govt subtotal / service fee / VAT / grand total, PDF.
    ========================================================= */
-const LINE_ROWS=20;
+
 let INV=null;          // working invoice in the builder
 
 /* The three documents this builder can produce. Only a tax invoice carries VAT
    wording; a quotation is an offer and a receipt confirms money already taken. */
-const DOC_TYPES={
-  'TAX INVOICE':{prefix:'TL',totalLabel:'GRAND TOTAL',dueLabel:'BALANCE DUE',
-    foot:'This is a computer-generated tax invoice and does not require a signature.',
-    thanks:'Thanks for doing business with us!',stamp:''},
-  'QUOTATION':{prefix:'QT',totalLabel:'QUOTED TOTAL',dueLabel:'PAYABLE ON ACCEPTANCE',
-    foot:'This quotation is valid for 15 days from the date above. Government charges are subject to change without notice.',
-    thanks:'We look forward to working with you.',stamp:'QUOTATION'},
-  'PAYMENT RECEIPT':{prefix:'RC',totalLabel:'TOTAL',dueLabel:'BALANCE REMAINING',
-    foot:'Received with thanks. This receipt confirms the amount recorded against your account.',
-    thanks:'Thank you for your payment!',stamp:'PAID'}
-};
-function docCfg(inv){return DOC_TYPES[(inv&&inv.DocType)||'TAX INVOICE']||DOC_TYPES['TAX INVOICE'];}
 
-function blankInvoice(){
-  return {DocType:'TAX INVOICE',InvoiceNo:'',InvoiceDate:today(),BillTo:'',Applicant:'',ContactInfo:'',ServiceType:'',
-    CustomerTRN:'NOT REGISTERED',TimeLinkTRN:D.settings.trn,
-    ServiceFee:0,Advance:0,items:[],Note:''};
-}
-function serviceTypes(){return [...new Set(D.taskTemplates.map(t=>t.serviceType))].sort();}
-function itemNames(){return [...new Set([...D.rates.map(r=>r.item),...D.taskTemplates.map(t=>t.desc),
-  ...D.invoiceItems.map(i=>i.desc)])].filter(Boolean).sort();}
-function customerNames(){return [...new Set([...D.contacts.map(c=>c.name),...D.invoices.map(i=>i.BillTo),...D.companies])].filter(Boolean).sort();}
+
+
+
+
+
+
 /* invoice lines are billed at the government rate; our margin is the separate Service Fee */
 function lookupRate(desc){const r=findRate(desc);return r?r.rate:0;}
 
 /* ---------- invoice number: TL + YYMM + NN ---------- */
-function yymm(d){const x=d?new Date(d):new Date();
-  return String(x.getFullYear()).slice(2)+String(x.getMonth()+1).padStart(2,'0');}
+
 /* NN is normally 2 digits, but the sheet already contains TL2606100 (NN rolled past 99),
    so the parser accepts 2 or more digits and the generator widens only when it must. */
-function docPrefix(inv){
-  const base=D.settings.prefix||'TL';
-  const c=docCfg(inv);
-  return c.prefix==='TL'?base:c.prefix;
-}
-function parseInvNo(no,inv){
-  const p=inv!==undefined?docPrefix(inv):(D.settings.prefix||'TL');
-  const m=String(no||'').trim().toUpperCase().match(new RegExp('^'+p+'(\\d{4})(\\d{2,})$'));
-  if(!m)return null;
-  return{yymm:m[1],nn:+m[2],num6:+m[1]*1000+ +m[2]};
-}
-function nextInvNo(dateStr,inv){
-  const p=inv?docPrefix(inv):(D.settings.prefix||'TL'), ym=yymm(dateStr);
-  let max=0;
-  D.invoices.forEach(v=>{
-    const q=parseInvNo(v.InvoiceNo,{DocType:v.DocType});
-    if(q&&q.yymm===ym&&q.nn>max&&String(v.InvoiceNo).startsWith(p))max=q.nn;});
-  const nn=max+1;
-  return p+ym+String(nn).padStart(2,'0');
-}
+
+
+
 /* stored header totals vs the sum of the saved line items */
-function invMismatch(v){
-  const items=D.invoiceItems.filter(i=>String(i.invoiceNo).trim()===String(v.InvoiceNo).trim());
-  if(!items.length)return null;
-  const govt=Math.round(items.reduce((a,x)=>a+n(x.qty)*n(x.rate),0)*100)/100;
-  const d=Math.round((govt-n(v.GovtSubtotal))*100)/100;
-  return Math.abs(d)>0.51?{govt,stored:n(v.GovtSubtotal),diff:d}:null;
-}
-function findInvoice(no){return D.invoices.find(v=>String(v.InvoiceNo).trim()===String(no).trim());}
+
+
 
 /* ---------- totals ---------- */
-function invTotals(inv){
-  // only count a line once it has a description — matches the filter used by
-  // validateInv()/saveInvoice()/exportInvoicePDF(), so a qty/rate typed into
-  // a still-blank row can't inflate the live total shown before it's saved
-  const govt=Math.round(inv.items.filter(x=>(x.desc||'').trim())
-    .reduce((a,x)=>a+n(x.qty)*n(x.rate),0)*100)/100;
-  const fee=n(inv.ServiceFee);
-  const vat=Math.round(fee*n(D.settings.vatRate)*100)/100;
-  const grand=Math.round((govt+fee+vat)*100)/100;
-  const adv=Math.round(n(inv.Advance)*100)/100;
-  return{govt,fee,vat,feeInc:Math.round((fee+vat)*100)/100,
-    grand,advance:adv,balance:Math.round((grand-adv)*100)/100};
-}
+
 
 /* =========================================================
    BUILDER VIEW
@@ -1511,14 +1100,7 @@ function loadInvoice(no){
     Note:v.Note||'',items};
   switchView('invoice');
 }
-function normDate(s){
-  if(!s)return today();
-  const t=String(s).trim();
-  if(/^\d{4}-\d{2}-\d{2}/.test(t))return t.slice(0,10);
-  const m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(m)return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  return today();
-}
+
 function navInv(step){
   const list=D.invoices.map(v=>v.InvoiceNo).filter(x=>parseInvNo(x))
     .sort((a,b)=>parseInvNo(a).num6-parseInvNo(b).num6);
@@ -1664,21 +1246,13 @@ function renderInvoiceList(){
 /* =========================================================
    PHASE 3 — DASHBOARD + CASH / BANK ACCOUNTS
    ========================================================= */
-let DR=0;   // dashboard range in days, 0 = all time
-let AF=0;   // cash & bank money-flow range
+   // dashboard range in days, 0 = all time
+   // cash & bank money-flow range
 
-function inRange(iso){
-  if(!DR)return true;
-  return iso && iso>=daysAgo(DR);
-}
+
 /* If the chosen window holds no entries, fall back to all-time so the
    dashboard is never blank just because the data is older than the filter. */
-function autoRange(){
-  if(!DR)return false;
-  const has=D.transactions.some(t=>t.date&&!isBlankTx(t)&&inRange(t.date));
-  if(!has){DR=0;return true;}
-  return false;
-}
+
 function svgLine(points,w,h,color,fill){
   if(points.length<2)return '';
   const vals=points.map(p=>p.v);
@@ -1713,16 +1287,7 @@ function svgLine(points,w,h,color,fill){
 }
 
 /* Daily points get noisy over a long window, so group into months past ~45 days. */
-function trendPoints(map){
-  const days=Object.keys(map).sort();
-  if(days.length<=45)return days.map(d=>({d:fmtDate(d),v:map[d],key:d}));
-  const byMonth={};
-  days.forEach(d=>{const k=d.slice(0,7);byMonth[k]=(byMonth[k]||0)+map[d];});
-  return Object.keys(byMonth).sort().map(k=>{
-    const[y,mo]=k.split('-');
-    return{d:`${MON[+mo-1]} ${y}`,v:byMonth[k],key:k};
-  });
-}
+
 
 function renderDash(){
   const switched=autoRange();
@@ -1731,7 +1296,7 @@ function renderDash(){
   [['0','All time'],['7','Last 7 days'],['30','Last 30 days'],['90','Last 90 days'],['365','Last 12 months']]
     .forEach(([v,l])=>sel.append(new Option(l,v)));
   sel.value=String(DR);
-  sel.onchange=()=>{DR=+sel.value;renderDash();};
+  sel.onchange=()=>{setDR(+sel.value);renderDash();};
   T.append(sel);
   mkBtn(T,'Print','',()=>print());
 
@@ -1812,7 +1377,7 @@ function renderDash(){
     r.innerHTML=`<div class="i">${i+1}</div><div class="nm">${esc(x.company)}
       <div class="bar"><i style="width:${(-x.balance/maxDue*100).toFixed(1)}%;background:linear-gradient(90deg,#9f1239,#f43f5e)"></i></div></div>
       <div class="v" style="color:var(--neg)">${m0(-x.balance)}</div>`;
-    r.onclick=()=>{SS={company:x.company,from:'',to:''};switchView('statement');};
+    r.onclick=()=>{setSS({company:x.company,from:'',to:''});switchView('statement');};
     c1.append(r);
   });
   wrap.append(c1);
@@ -1829,7 +1394,7 @@ function renderDash(){
     r.innerHTML=`<div class="i">${i+1}</div><div class="nm">${esc(x.company)}
       <div class="bar"><i style="width:${(x.balance/maxAdv*100).toFixed(1)}%"></i></div></div>
       <div class="v" style="color:var(--pos)">${m0(x.balance)}</div>`;
-    r.onclick=()=>{SS={company:x.company,from:'',to:''};switchView('statement');};
+    r.onclick=()=>{setSS({company:x.company,from:'',to:''});switchView('statement');};
     c2.append(r);
   });
   wrap.append(c2);
@@ -1900,16 +1465,8 @@ function renderDash(){
   });
   wrap.append(c5);
 }
-function dayspan(){
-  const ds=D.transactions.map(t=>t.date).filter(Boolean).sort();
-  if(ds.length<2)return 1;
-  return Math.max(1,(new Date(ds[ds.length-1])-new Date(ds[0]))/864e5);
-}
-function companyBalances(){
-  const names=[...new Set([...D.transactions.map(t=>t.company),...D.payments.map(p=>p.company)])].filter(Boolean);
-  return names.map(c=>{const s=buildStatement(c,'','');
-    return{company:c,cost:s.totalCost,received:s.totalRec,balance:s.closing};}).sort((a,b)=>a.balance-b.balance);
-}
+
+
 
 /* ---------- accounts ----------
    Mirrors the balance formulas in row 2 of the FROM JAN 2026 sheet:
@@ -1917,59 +1474,15 @@ function companyBalances(){
      credit → expenses tagged to this account  −  repayments        (cards, AMER) = amount owed
      tally  → straight sum of the ledger column                     (Office Expenses, Withdrawn Profit)
    ------------------------------------------------------------- */
-const ACC_FALLBACK={'IRFAN':'#eab308','ABRAR':'#22c55e'};
-function accMeta(nm){return (D.settings.accounts||[]).find(a=>a.name===nm)||null;}
-function accColor(nm){const m=accMeta(nm);
-  return (m&&m.color)||ACC_FALLBACK[nm]||(accentFor(nm)||{}).color||'#64748b';}
 
-function accountBalances(){
-  const led={},moves={},spend={};
-  D.ledger.forEach(l=>{led[l.account]=(led[l.account]||0)+n(l.amount);moves[l.account]=(moves[l.account]||0)+1;});
-  D.transactions.forEach(t=>{if(!t.paidFrom)return;
-    spend[t.paidFrom]=(spend[t.paidFrom]||0)+n(t.expense);moves[t.paidFrom]=(moves[t.paidFrom]||0)+1;});
-  // customer receipts credit whichever account they landed in — but skip
-  // payments mirrored from a cash-book row (srcLedger set), since that row
-  // is already counted in the ledger sum above and would otherwise be
-  // added twice into the account balance.
-  (D.payments||[]).forEach(p=>{if(!p.account||!n(p.amount)||p.srcLedger)return;
-    led[p.account]=(led[p.account]||0)+n(p.amount);moves[p.account]=(moves[p.account]||0)+1;});
-  // overheads are paid out of an account too
-  (D.expenses||[]).forEach(x=>{if(!x.account||!n(x.amount))return;
-    spend[x.account]=(spend[x.account]||0)+n(x.amount);moves[x.account]=(moves[x.account]||0)+1;});
 
-  const defs=(D.settings.accounts||[]).slice();
-  // include any account seen in data but not configured
-  [...new Set([...Object.keys(led),...Object.keys(spend)])].forEach(nm=>{
-    if(!defs.some(a=>a.name===nm)&&!defs.some(a=>a.settle===nm))defs.push({name:nm,type:'asset'});
-  });
 
-  return defs.map(a=>{
-    const adj=n(a.adjust),sp=n(spend[a.name]);
-    let bal,inn,out,kind;
-    if(a.type==='credit'){
-      const rep=n(led[a.settle||a.name]);
-      bal=sp-rep+adj; inn=rep; out=sp; kind='owed';
-    } else if(a.type==='tally'){
-      bal=n(led[a.name])+adj; inn=n(led[a.name]); out=0; kind='total';
-    } else {
-      bal=n(led[a.name])-sp+adj; inn=n(led[a.name]); out=sp; kind='balance';
-    }
-    return{name:a.name,type:a.type||'asset',kind,in:Math.round(inn*100)/100,out:Math.round(out*100)/100,
-      adjust:adj,moves:(moves[a.name]||0)+(a.settle?(moves[a.settle]||0):0),
-      balance:Math.round(bal*100)/100,color:accColor(a.name)};
-  }).sort((a,b)=>Math.abs(b.balance)-Math.abs(a.balance));
-}
 
-function accountNames(){
-  return [...new Set([...(D.settings.accounts||[]).map(a=>a.name),
-    ...D.transactions.map(t=>t.paidFrom).filter(Boolean)])].sort();
-}
-function accSettleNames(){
-  return [...new Set([...(D.settings.accounts||[]).map(a=>a.name),
-    ...(D.settings.accounts||[]).map(a=>a.settle).filter(Boolean),
-    ...D.ledger.map(l=>l.account).filter(Boolean)])].sort();
-}
-const PALETTE=['#0d9488','#e11d48','#2563eb','#f97316','#7c3aed','#22c55e','#eab308','#8d6e63','#64748b','#a855f7','#ec4899','#06b6d4'];
+
+
+
+
+
 
 /* ---- add / edit an account ---- */
 function accountDialog(existing){
@@ -2119,7 +1632,7 @@ function renderAccounts(){
   [['0','All time'],['30','Last 30 days'],['90','Last 90 days'],['365','Last 12 months']]
     .forEach(([val,l])=>per.append(new Option(l,val)));
   per.value=String(AF);
-  per.onchange=()=>{AF=+per.value;renderAccounts();};
+  per.onchange=()=>{setAF(+per.value);renderAccounts();};
   fh.append(per);
   flow.append(fh);
 
@@ -2274,39 +1787,7 @@ function insuranceSoon(days){
 /* =========================================================
    PHASE 4 — EMPLOYEES REGISTER
    ========================================================= */
-function employeeStats(){
-  const map={};
-  const touch=nm=>{if(!map[nm])map[nm]={name:nm,companies:new Set(),jobs:0,received:0,expense:0,
-    profit:0,first:'',last:'',works:{}};return map[nm];};
-  (D.employees||[]).forEach(e=>{const a=touch(e.name);if(e.company)a.companies.add(e.company);a.note=e.note;});
-  D.transactions.forEach(t=>{
-    const nm=(t.employee||'').trim();if(!nm)return;
-    const a=touch(nm);
-    if(t.company)a.companies.add(t.company);
-    a.jobs++;a.received+=n(t.received);a.expense+=n(t.expense);a.profit+=n(t.profit);
-    if(t.work)a.works[t.work]=(a.works[t.work]||0)+1;
-    if(t.date){if(!a.first||t.date<a.first)a.first=t.date;if(!a.last||t.date>a.last)a.last=t.date;}
-  });
-  // visa progress
-  D.visa.forEach(v=>{
-    const nm=(v.employee||'').trim();if(!nm||!map[nm])return;
-    const steps=Object.keys(v.steps);
-    map[nm].visaDone=steps.filter(s=>v.steps[s]).length;
-    map[nm].visaTotal=steps.length;
-  });
-  // insurance
-  D.insurance.forEach(i=>{
-    const nm=(i.worker||'').trim().toUpperCase();
-    // exact match only — a startsWith match here would attribute "ALI KHAN"'s
-    // insurance to an unrelated employee simply named "ALI"
-    const hit=Object.keys(map).find(k=>k.toUpperCase()===nm);
-    if(hit&&i.expiry){if(!map[hit].insExpiry||i.expiry>map[hit].insExpiry)map[hit].insExpiry=i.expiry;}
-  });
-  return Object.values(map).map(a=>({...a,
-    companies:[...a.companies],
-    topWork:Object.entries(a.works).sort((x,y)=>y[1]-x[1])[0]||null
-  })).sort((a,b)=>b.profit-a.profit);
-}
+
 
 function renderEmployees(){
   const T=$('#tools');T.innerHTML='';
@@ -2380,31 +1861,7 @@ function renderEmployees(){
   draw();
 }
 
-function employeeHistory(name){
-  const rows=D.transactions.filter(t=>(t.employee||'').trim()===name)
-    .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  const body=el('div');
-  const tot=rows.reduce((a,t)=>({r:a.r+n(t.received),e:a.e+n(t.expense),p:a.p+n(t.profit)}),{r:0,e:0,p:0});
-  const s=el('div','hint');
-  s.innerHTML=`<b style="color:var(--ink)">${rows.length}</b> jobs &nbsp;·&nbsp; received <b style="color:var(--ink)">${m0(tot.r)}</b>
-    &nbsp;·&nbsp; expense <b style="color:var(--ink)">${m0(tot.e)}</b>
-    &nbsp;·&nbsp; profit <b style="color:${tot.p<0?'var(--neg)':'var(--pos)'}">${m0(tot.p)}</b>`;
-  body.append(s);
-  const t=el('table','list');
-  t.innerHTML='<thead><tr><th style="width:104px">Date</th><th>Company</th><th>Work</th>'+
-    '<th style="width:80px;text-align:right">Rec</th><th style="width:80px;text-align:right">Exp</th>'+
-    '<th style="width:80px;text-align:right">Profit</th></tr></thead>';
-  const tb=el('tbody');
-  rows.slice(0,200).forEach(x=>{const tr=el('tr');
-    tr.innerHTML=`<td>${fmtDate(x.date)}</td><td>${esc(x.company)}</td><td>${esc(x.work)}</td>
-      <td class="n">${m0(x.received)}</td><td class="n">${m0(x.expense)}</td>
-      <td class="n" style="color:${n(x.profit)<0?'var(--neg)':'var(--pos)'}">${m0(x.profit)}</td>`;
-    tb.append(tr);});
-  t.append(tb);
-  const box=el('div');box.style.cssText='max-height:52vh;overflow:auto;margin-top:10px';
-  box.append(t);body.append(box);
-  modal(name,body,[{label:'Close'}]);
-}
+
 
 /* =========================================================
    PHASE 4 — GLOBAL SEARCH  (Ctrl/Cmd + K)
@@ -2427,7 +1884,7 @@ function openSearch(){
     const comp=allCompanies().filter(c=>c.toUpperCase().includes(U)).slice(0,6);
     if(comp.length)groups.push({t:'Companies',i:'◎',items:comp.map(c=>{
       const b=buildStatement(c,'','');
-      return{l:c,r:`${m0(b.closing)} ${b.closing<0?'due':'adv'}`,go:()=>{SS={company:c,from:'',to:''};switchView('statement');}};})});
+      return{l:c,r:`${m0(b.closing)} ${b.closing<0?'due':'adv'}`,go:()=>{setSS({company:c,from:'',to:''});switchView('statement');}};})});
     const emp=employeeStats().filter(e=>e.name.toUpperCase().includes(U)).slice(0,6);
     if(emp.length)groups.push({t:'Employees',i:'☺',items:emp.map(e=>
       ({l:e.name,r:`${e.jobs} jobs · ${m0(e.profit)}`,go:()=>{switchView('employees');setTimeout(()=>employeeHistory(e.name),120);}}))});
@@ -2468,22 +1925,7 @@ document.addEventListener('keydown',e=>{
 /* =========================================================
    PHASE 5 — PARTNER SHARES
    ========================================================= */
-function partnerData(){
-  const parts=D.settings.partners||[];
-  const tx=D.transactions;
-  const grossProfit=tx.reduce((a,t)=>a+n(t.profit),0);
-  const office=D.ledger.filter(l=>l.account==='OFFICE EXPENSES').reduce((a,l)=>a+n(l.amount),0);
-  const reserves=D.ledger.filter(l=>l.account==='RESERVES').reduce((a,l)=>a+n(l.amount),0);
-  const distributable=Math.round((grossProfit-office-reserves)*100)/100;
-  const rows=parts.map(p=>{
-    const drawn=D.ledger.filter(l=>l.account===p.drawAccount).reduce((a,l)=>a+n(l.amount),0);
-    const share=Math.round(distributable*n(p.share)*100)/100;
-    return{...p,share:n(p.share),entitled:share,drawn:Math.round(drawn*100)/100,
-      outstanding:Math.round((share-drawn)*100)/100};
-  });
-  return{grossProfit,office,reserves,distributable,rows,
-    totalShare:rows.reduce((a,r)=>a+r.share,0)};
-}
+
 
 function renderPartners(){
   const T=$('#tools');T.innerHTML='';
@@ -2623,7 +2065,7 @@ function allAlerts(){
     A.push({sev:'low',i:'✓',t:`Visa file ${done}/${steps.length} complete`,d:`${v.employee} · ${v.company}`,go:'visa'});});
   companyBalances().filter(x=>x.balance<-1000).slice(0,25).forEach(x=>
     A.push({sev:'med',i:'₳',t:`${m0(-x.balance)} outstanding`,d:x.company,go:'companies',
-      act:()=>{SS={company:x.company,from:'',to:''};switchView('statement');}}));
+      act:()=>{setSS({company:x.company,from:'',to:''});switchView('statement');}}));
   const untagged=D.transactions.filter(t=>!t.paidFrom&&n(t.expense)>0);
   if(untagged.length)A.push({sev:'med',i:'⚠',t:`${untagged.length} entries have an expense but no Paid From account`,
     d:`${m0(untagged.reduce((a,t)=>a+n(t.expense),0))} unallocated`,go:'entry'});
@@ -2714,13 +2156,7 @@ function renderAudit(){
 /* =========================================================
    PHASE 6 — SHARE VIA WHATSAPP
    ========================================================= */
-function waNumber(raw){
-  let s=String(raw||'').replace(/\D/g,'');
-  if(!s)return '';
-  s=s.replace(/^0+/,'');
-  if(!s.startsWith('971'))s='971'+s;
-  return s;
-}
+
 function shareStatementWA(){
   if(!SS.company){toast('Select a company first',1);return;}
   const s=buildStatement(SS.company,SS.from,SS.to);
@@ -2771,40 +2207,7 @@ function shareInvoiceWA(inv){
    Every movement that touches one account, oldest first so the
    running balance reads downward and the latest sits at the bottom.
    ========================================================= */
-function accountMovements(name){
-  const cfg=(D.settings.accounts||[]).find(a=>a.name===name)||{};
-  const settle=cfg.settle||name;
-  const out=[];
-  D.ledger.forEach(l=>{
-    if(l.account!==name&&l.account!==settle)return;
-    // on a credit card, a ledger entry is a repayment: it reduces what is owed
-    out.push({date:l.date||'',kind:cfg.type==='credit'?'Repayment':'Movement',
-      who:'',what:l.remark||'—',amount:cfg.type==='credit'?-n(l.amount):n(l.amount)});
-  });
-  D.transactions.forEach(t=>{
-    if(t.paidFrom!==name||!n(t.expense))return;
-    out.push({date:t.date||'',kind:'Work expense',who:t.company||'',
-      what:`${t.work||''}${t.employee?' — '+t.employee:''}`,
-      amount:cfg.type==='credit'?n(t.expense):-n(t.expense)});
-  });
-  (D.payments||[]).forEach(p=>{
-    // a payment mirrored from a cash-book row (srcLedger set) is already
-    // represented by that ledger movement above — counting it again here
-    // would double the account's balance and history.
-    if(p.account!==name||!n(p.amount)||p.srcLedger)return;
-    out.push({date:p.date||'',kind:'Payment received',who:p.company||'',
-      what:p.remark||'customer receipt',amount:cfg.type==='credit'?-n(p.amount):n(p.amount)});
-  });
-  (D.expenses||[]).forEach(x=>{
-    if(x.account!==name||!n(x.amount))return;
-    out.push({date:x.date||'',kind:'Overhead',who:x.category||'',what:x.desc||'—',
-      amount:cfg.type==='credit'?n(x.amount):-n(x.amount)});
-  });
-  out.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-  let run=n(cfg.adjust);
-  out.forEach(m=>{run+=m.amount;m.balance=Math.round(run*100)/100;});
-  return{rows:out,cfg,opening:n(cfg.adjust)};
-}
+
 
 function accountHistory(name){
   const a=accountBalances().find(x=>x.name===name);
@@ -2885,19 +2288,16 @@ function accountHistory(name){
    EXPENSES — office and business overheads
    ========================================================= */
 const XCOL={date:1,category:2,desc:3,amount:4,account:5};
-const isBlankExp=x=>!x.category&&!x.desc&&!n(x.amount)&&!x.account;
-function newExp(){return{id:uid(),date:today(),category:'',desc:'',amount:0,account:''};}
-function expCategories(){
-  return [...new Set([...(D.settings.expenseCategories||[]),
-    ...(D.expenses||[]).map(x=>x.category).filter(Boolean)])].sort();
-}
+
+
+
 function topUpExpenses(){
   D.expenses=D.expenses||[];
   let spare=D.expenses.filter(isBlankExp).length,added=false;
   while(spare<5){D.expenses.push(newExp());spare++;added=true;}
   if(added)save();
 }
-function monthKey(iso){return String(iso||'').slice(0,7);}
+
 
 function renderExpenses(){
   topUpExpenses();
@@ -3174,8 +2574,8 @@ function templateDialog(name){
 const CB={left:'COUNTER CASH',right:'ADCB',rail:'COUNTER CASH'};
 const CBCOL={date:1,amount:2,desc:3};
 
-const isBlankCB=l=>!n(l.amount)&&!l.remark;
-function newCB(account){return{id:uid(),date:today(),account,amount:0,remark:'',company:''};}
+
+
 
 function cbRows(account){
   return D.ledger.filter(l=>l.account===account)
@@ -3193,25 +2593,12 @@ function topUpCB(account,keep){
 }
 
 /* The description offers accounts first (a transfer) then companies (a payment). */
-const XFER_PREFIX='> ';
-function cbPickList(current){
-  return [...accountNames().filter(a=>a!==current).map(a=>XFER_PREFIX+a),
-          ...allCompanies()];
-}
-function accountPick(text){
-  const v=String(text||'').trim();
-  if(!v)return '';
-  const bare=v.startsWith(XFER_PREFIX)?v.slice(XFER_PREFIX.length):v;
-  return accountNames().find(a=>a.toUpperCase()===bare.trim().toUpperCase())||'';
-}
+
+
+
 
 /* ---------- linking a cash-book row to a customer payment ---------- */
-function companyMatch(text){
-  const v=String(text||'').trim();
-  if(!v)return '';
-  const hit=allCompanies().find(c=>c.toUpperCase()===v.toUpperCase());
-  return hit||'';
-}
+
 /* A transfer writes the opposite entry into the other account, so the pair nets
    to zero across the business. The mirror is owned by this row and follows it. */
 function syncLinkedTransfer(l){
@@ -3518,45 +2905,12 @@ function buildCashbookPanel(){
    Basis: tax invoices, by invoice date. Quotations and receipts are
    not tax documents and are excluded.
    ========================================================= */
-function vatRate(){return n(D.settings.vatRate)||0.05;}
 
-function vatRows(){
-  return D.invoices.filter(v=>{
-    const t=(v.DocType||'TAX INVOICE').toUpperCase();
-    return t==='TAX INVOICE';
-  }).map(v=>{
-    const date=normDate(v.InvoiceDate);
-    const fee=n(v.ServiceFee);
-    /* recompute rather than trust the stored figure — a few sheet rows
-       carry a VAT value that does not match their own service fee */
-    const vat=Math.round(fee*vatRate()*100)/100;
-    return{no:v.InvoiceNo,date,billTo:v.BillTo||'',fee,vat,
-      govt:n(v.GovtSubtotal),grand:n(v.GrandTotal),
-      stored:n(v.VAT),drift:Math.abs(n(v.VAT)-vat)>0.011};
-  }).filter(r=>r.date);
-}
-function quarterOf(iso){
-  const m=+String(iso).slice(5,7);
-  return{y:String(iso).slice(0,4),q:Math.ceil(m/3)};
-}
-function vatPeriods(mode){
-  const rows=vatRows(),out={};
-  rows.forEach(r=>{
-    const key=mode==='month'?r.date.slice(0,7)
-      :`${quarterOf(r.date).y}-Q${quarterOf(r.date).q}`;
-    if(!out[key])out[key]={key,count:0,fee:0,vat:0,govt:0,grand:0,rows:[]};
-    const b=out[key];
-    b.count++;b.fee+=r.fee;b.vat+=r.vat;b.govt+=r.govt;b.grand+=r.grand;b.rows.push(r);
-  });
-  return Object.values(out).sort((a,b)=>b.key.localeCompare(a.key))
-    .map(b=>({...b,fee:Math.round(b.fee*100)/100,vat:Math.round(b.vat*100)/100,
-      govt:Math.round(b.govt*100)/100,grand:Math.round(b.grand*100)/100}));
-}
-function periodLabel(key){
-  if(key.includes('Q'))return key.replace('-',' ');
-  const[y,m]=key.split('-');
-  return `${MON[+m-1]} ${y}`;
-}
+
+
+
+
+
 
 let VATMODE='quarter';
 function renderVAT(){
@@ -3644,98 +2998,18 @@ function renderVAT(){
   wrap.append(card);
 }
 
-function vatDetail(p){
-  const body=el('div');
-  const s=el('div','achead');
-  s.style.setProperty('--ac','#f43f5e');
-  s.innerHTML=`<div class="l"><div class="k">Output VAT payable</div><div class="b">${m2(p.vat)}</div></div>
-    <div class="r">
-      <div><span>Invoices</span><b>${p.count}</b></div>
-      <div><span>Service fees</span><b>${m0(p.fee)}</b></div>
-      <div><span>Out of scope</span><b>${m0(p.govt)}</b></div>
-    </div>`;
-  body.append(s);
 
-  const box=el('div','glass gridwrap');box.style.cssText='max-height:52vh;margin-top:12px';
-  const t=el('table','list');
-  t.innerHTML=`<thead><tr><th style="width:110px">Invoice</th><th style="width:104px">Date</th>
-    <th>Bill To</th><th style="width:120px;text-align:right">Service Fee</th>
-    <th style="width:110px;text-align:right">VAT</th>
-    <th style="width:130px;text-align:right">Govt Charges</th></tr></thead>`;
-  const tb=el('tbody');
-  p.rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>{
-    const tr=el('tr');
-    tr.innerHTML=`<td style="font-family:var(--mono);font-weight:700;color:var(--gold)">${esc(r.no)}</td>
-      <td>${fmtDate(r.date)}</td><td>${esc(r.billTo)}</td>
-      <td class="n">${m2(r.fee)}</td>
-      <td class="n" style="font-weight:700">${m2(r.vat)}${r.drift?' <span class="badge w" title="Stored '+m2(r.stored)+'">!</span>':''}</td>
-      <td class="n" style="color:var(--ink-3)">${m2(r.govt)}</td>`;
-    tb.append(tr);
-  });
-  t.append(tb);box.append(t);body.append(box);
-
-  const csvb=el('div');csvb.style.marginTop='10px';
-  const b=el('button','btn sm','↓ CSV');
-  b.onclick=()=>dl(new Blob([csv([['INVOICE','DATE','BILL TO','SERVICE FEE','VAT','GOVT CHARGES'],
-    ...p.rows.map(r=>[r.no,r.date,r.billTo,r.fee,r.vat,r.govt])])],
-    {type:'text/csv'}),`vat-${p.key}.csv`);
-  csvb.append(b);body.append(csvb);
-
-  modal(`VAT — ${periodLabel(p.key)}`,body,[{label:'Close'}]);
-}
 
 /* =========================================================
    RECEIVABLES AGEING
    Payments settle the oldest work first, so whatever is left unpaid
    keeps the date of the work it belongs to. That date decides its bucket.
    ========================================================= */
-const AGE_BUCKETS=[
-  {key:'current',label:'Current',max:30,color:'#22c55e'},
-  {key:'b30',label:'31–60 days',max:60,color:'#fbbf24'},
-  {key:'b60',label:'61–90 days',max:90,color:'#fb923c'},
-  {key:'b90',label:'Over 90 days',max:Infinity,color:'#f43f5e'}
-];
-function daysBetween(iso,ref){
-  if(!iso)return 0;
-  return Math.floor((new Date(ref||today())-new Date(iso))/864e5);
-}
+
+
 /* Returns the unpaid work for one company, aged. */
-function ageCompany(company,ref){
-  const entries=companyEntries(company);
-  const open=[];          // unsettled work, oldest first
-  let credit=0;           // payments waiting to be applied
-  entries.forEach(x=>{
-    if(x.received>0){credit+=x.received;return;}
-    /* A negative receipt is a refund back to the customer — it increases what
-       they owe, so it joins the queue as a charge rather than being skipped. */
-    if(x.received<0){open.push({date:x.date,left:-x.received,
-      work:x.work||'REFUND',employee:x.employee});return;}
-    if(x.cost>0)open.push({date:x.date,left:x.cost,work:x.work,employee:x.employee});
-  });
-  // apply every payment against the oldest outstanding work
-  for(const item of open){
-    if(credit<=0)break;
-    const take=Math.min(credit,item.left);
-    item.left-=take;credit-=take;
-  }
-  const buckets={current:0,b30:0,b60:0,b90:0};
-  let oldest=null;
-  open.filter(i=>i.left>0.005).forEach(i=>{
-    const age=daysBetween(i.date,ref);
-    const b=AGE_BUCKETS.find(x=>age<=x.max)||AGE_BUCKETS[AGE_BUCKETS.length-1];
-    buckets[b.key]+=i.left;
-    if(!oldest||i.date<oldest)oldest=i.date;
-  });
-  const owed=Object.values(buckets).reduce((a,x)=>a+x,0);
-  return{company,buckets,owed:Math.round(owed*100)/100,
-    advance:Math.round(credit*100)/100,
-    oldest,oldestDays:oldest?daysBetween(oldest,ref):0};
-}
-function ageAll(ref){
-  return allCompanies().map(c=>ageCompany(c,ref))
-    .filter(r=>r.owed>0.005)
-    .sort((a,b)=>b.buckets.b90-a.buckets.b90||b.owed-a.owed);
-}
+
+
 
 function renderAgeing(){
   const T=$('#tools');T.innerHTML='';
@@ -3814,7 +3088,7 @@ function renderAgeing(){
       <td style="font-size:11.5px">${r.oldest?fmtDate(r.oldest)+`<div style="font-size:10px;color:var(--ink-3)">${r.oldestDays} days</div>`:'—'}</td>
       <td class="c"></td>`;
     const b=el('button','btn sm','Statement');
-    b.onclick=()=>{SS={company:r.company,from:'',to:''};switchView('statement');};
+    b.onclick=()=>{setSS({company:r.company,from:'',to:''});switchView('statement');};
     tr.lastChild.append(b);
     tb.append(tr);
   });
@@ -3876,68 +3150,15 @@ function batchStatements(){
    cadence — rent, salaries, renewals. Nothing posts silently:
    due items are listed on open and you confirm them.
    ========================================================= */
-const FREQ={
-  weekly:{label:'Every week',days:7},
-  fortnightly:{label:'Every 2 weeks',days:14},
-  monthly:{label:'Every month',months:1},
-  quarterly:{label:'Every 3 months',months:3},
-  yearly:{label:'Every year',months:12}
-};
-function newRecurring(){
-  return{id:uid(),active:true,kind:'expense',label:'',category:'',
-    amount:0,account:'',freq:'monthly',next:today(),lastPosted:'',posted:0};
-}
+
+
 /* Advance a date by one cycle, keeping the day of month where possible. */
-function advanceDate(iso,freq){
-  const f=FREQ[freq]||FREQ.monthly;
-  const d=new Date(iso+'T00:00:00');
-  if(f.days)d.setDate(d.getDate()+f.days);
-  else{
-    const day=d.getDate();
-    d.setDate(1);
-    d.setMonth(d.getMonth()+f.months);
-    // clamp to the last day of a shorter month
-    const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
-    d.setDate(Math.min(day,last));
-  }
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function dueRecurring(ref){
-  ref=ref||today();
-  return (D.recurring||[]).filter(r=>r.active&&r.next&&r.next<=ref&&n(r.amount));
-}
+
+
 /* Posts one occurrence and rolls the schedule forward. */
-function postRecurring(r,onDate){
-  const date=onDate||r.next||today();
-  if(r.kind==='expense'){
-    D.expenses=D.expenses||[];
-    D.expenses.push({id:uid(),date,category:r.category||'MISCELLANEOUS',
-      desc:r.label||'Recurring',amount:n(r.amount),account:r.account||'',
-      srcRecurring:r.id});
-  } else {
-    D.ledger.push({id:uid(),date,account:r.account||'COUNTER CASH',
-      amount:n(r.amount),remark:r.label||'Recurring',company:'',
-      srcRecurring:r.id});
-  }
-  r.lastPosted=date;
-  r.posted=(r.posted||0)+1;
-  r.next=advanceDate(date,r.freq);
-  audit('post','recurring',`${r.label} ${m0(r.amount)}`);
-  return r.next;
-}
+
 /* Catch up anything overdue — a schedule missed for two months posts twice. */
-function postAllDue(){
-  let count=0;
-  // guard is per-schedule, not shared — otherwise one badly overdue schedule
-  // could exhaust the whole safety cap and leave later schedules half-caught-up
-  // with no error shown.
-  dueRecurring().forEach(r=>{
-    let guard=0;
-    while(r.active&&r.next<=today()&&guard++<400){postRecurring(r);count++;}
-  });
-  if(count)save();
-  return count;
-}
+
 
 function renderRecurring(){
   D.recurring=D.recurring||[];
@@ -4089,31 +3310,19 @@ function recurringDialog(existing){
    small — the working data object is written on every keystroke and
    must not carry megabytes of images.
    ========================================================= */
-const FILE_STORE='files';
-const MAX_FILE=4*1024*1024;   // 4 MB per file
+
+   // 4 MB per file
 
 /* Same database, same connection logic as idb() in p2_core.js — kept as one
    alias rather than a second indexedDB.open() so the version number and the
    set of stores created on upgrade can never drift apart again. */
-function fdb(){return idb();}
-async function filePut(id,blob){
-  const db=await fdb();
-  return new Promise(r=>{const t=db.transaction(FILE_STORE,'readwrite');
-    t.objectStore(FILE_STORE).put(blob,id);t.oncomplete=()=>r();});
-}
-async function fileGet(id){
-  const db=await fdb();
-  return new Promise(r=>{const q=db.transaction(FILE_STORE).objectStore(FILE_STORE).get(id);
-    q.onsuccess=()=>r(q.result);q.onerror=()=>r(null);});
-}
-async function fileDel(id){
-  const db=await fdb();
-  return new Promise(r=>{const t=db.transaction(FILE_STORE,'readwrite');
-    t.objectStore(FILE_STORE).delete(id);t.oncomplete=()=>r();});
-}
 
-function attachmentsFor(ref){return (D.attachments||[]).filter(a=>a.ref===ref);}
-function attachCount(ref){return attachmentsFor(ref).length;}
+
+
+
+
+
+
 
 /* A button that shows the count and opens the manager. */
 function attachButton(ref,title){
@@ -5114,8 +4323,8 @@ function listView(cols,rows,keys,opts){
 
 /* ---------- PAYMENTS ---------- */
 const PCOL={date:1,company:2,amount:3,account:4,remark:5};
-const isBlankPay=p=>!p.company&&!n(p.amount)&&!p.remark&&!p.account;
-function newPay(){return{date:today(),amount:0,company:'',account:'',remark:''};}
+
+
 function topUpPayments(){
   let spare=D.payments.filter(isBlankPay).length,added=false;
   while(spare<5){D.payments.push(newPay());spare++;added=true;}
@@ -5299,7 +4508,7 @@ function renderCompanies(){
       {t:'Net Position',v:m0(data.reduce((a,x)=>a+x.balance,0)),s:'AED'}],
     onRow:(tr,r)=>{
       const b=el('button','btn sm','Statement');
-      b.onclick=()=>{SS={company:r.company,from:'',to:''};switchView('statement');};
+      b.onclick=()=>{setSS({company:r.company,from:'',to:''});switchView('statement');};
       tr.lastChild.append(b);
     }
   });
@@ -5708,35 +4917,8 @@ function switchView(v){
 /* =========================================================
    BOOT
    ========================================================= */
-function freshSeed(){
-  const d=JSON.parse(JSON.stringify(SEED));
-  d.transactions.forEach((t,i)=>{t.id=uid();t._s=i;});
-  return d;
-}
-function migrate(d){
-  d.ledger=d.ledger||[];d.invoices=d.invoices||[];d.invoiceItems=d.invoiceItems||[];
-  d.taskTemplates=d.taskTemplates||[];d.insurance=d.insurance||[];d.visa=d.visa||[];
-  d.contacts=d.contacts||[];d.rates=d.rates||[];d.payments=d.payments||[];
-  d.employees=d.employees||[];d.audit=d.audit||[];d.expenses=d.expenses||[];
-  d.recurring=d.recurring||[];d.attachments=d.attachments||[];
-  d.expenses.forEach(x=>{if(!x.id)x.id=uid();});
-  d.ledger.forEach(l=>{if(!l.id)l.id=uid();if(l.company===undefined)l.company='';});
-  d.payments.forEach(p=>{if(p.account===undefined)p.account='';});
-  d.settings=Object.assign({},SEED.settings,d.settings||{});
-  d.settings.bank=Object.assign({},SEED.settings.bank,d.settings.bank||{});
-  d.settings.ai=Object.assign({url:'http://localhost:11434',model:'gpt-oss-large:latest',temperature:0.3},d.settings.ai||{});
-  if(!Array.isArray(d.settings.accounts)||!d.settings.accounts.length)
-    d.settings.accounts=JSON.parse(JSON.stringify(SEED.settings.accounts));
-  if(!Array.isArray(d.settings.expenseCategories)||!d.settings.expenseCategories.length)
-    d.settings.expenseCategories=(SEED.settings.expenseCategories||[]).slice();
-  if(!Array.isArray(d.settings.partners)||!d.settings.partners.length)
-    d.settings.partners=JSON.parse(JSON.stringify(SEED.settings.partners||[]));
-  rateBust();
-  d.companies=d.companies&&d.companies.length?d.companies:SEED.companies;
-  d.workItems=d.workItems&&d.workItems.length?d.workItems:SEED.workItems;
-  d.transactions.forEach((t,i)=>{if(!t.id)t.id=uid();if(t._s===undefined)t._s=i;});
-  return d;
-}
+
+
 /* ---------- mobile drawer ---------- */
 function closeNav(){document.body.classList.remove('navopen');$('#scrim').classList.remove('on');}
 function initAI(){
@@ -5794,7 +4976,12 @@ window.TimeLink = {
   get D() { return D; },
   set D(v) { setD(v); },
   NAV, switchView,
+  // saving, so a browser test can force a write and then reload the page
+  save, audit,
+  // statement selection, used by the print test
+  get SS() { return SS; }, setSS,
   n, m2, esc, parseAnyDate, parseClipTable,
   rateMap, rateBust, findRate, invoiceRate,
   invTotals, vatRate, accountBalances, partnerData,
+  ageAll, allAlerts, nextInvNo, waNumber,
 };

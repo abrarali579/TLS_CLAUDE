@@ -143,7 +143,7 @@ without going through the app's checks — take a backup first.
 
 | When | What happens |
 |---|---|
-| Every push to `main` | Install, build, run 74 tests, verify the file is self-contained, publish it as a downloadable artifact |
+| Every push to `main` | Check imports, build, run 121 tests, run the real-browser tests, verify the file is self-contained, publish it as a downloadable artifact |
 | Every pull request | Same checks, so you see the result before merging |
 | Monthly | Dependabot opens PRs for build-tool updates; CI tests each one |
 

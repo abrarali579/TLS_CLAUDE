@@ -29,8 +29,8 @@ npm test
 Takes about 12 seconds. You want to see:
 
 ```
-Test Files  6 passed (6)
-     Tests  74 passed (74)
+Test Files  9 passed (9)
+     Tests  121 passed (121)
 ```
 
 Some tests check the built app, so run `npm run build` first if you've changed
@@ -69,7 +69,10 @@ That second case is the only time it's right to edit a test to make it pass.
 
 | File | Covers |
 |---|---|
-| `test/modules.test.js` | the extracted `src\` modules, imported directly — runs in milliseconds |
+| `test/modules.test.js` | format, dates, store and rates — imported directly, runs in milliseconds |
+| `test/ui.test.js` | the shared plumbing: dom, csv, grid — against a lightweight fake DOM |
+| `test/domain.test.js` | invoice numbering, VAT periods, ageing, recurring dates, row shapes |
+| `test/globals.test.js` | every name in `src\` is declared, imported, or a real browser global |
 | `test/dates.test.js` | `parseAnyDate` and `parseClipTable` — reading typed and pasted dates |
 | `test/rates.test.js` | `rateMap`, `findRate`, `invoiceRate` — what a customer gets charged |
 | `test/money.test.js` | invoice totals, VAT, `accountBalances`, `partnerData` |
@@ -127,14 +130,37 @@ normalising lookup that upper-cases anyway, so making the first lookup
 case-sensitive genuinely doesn't change the result. Behaviour was preserved, so
 passing was correct.
 
-## What is not covered yet
+## The real-browser tests
 
-Worth knowing, so you don't over-trust the green:
+`npm test` runs against a *simulated* browser. Fast, but it can't prove your
+data survives a reload or that a download really produces a file. A second
+suite runs in an actual Chrome:
 
-- Anything needing a real browser: printing, PDF export, clipboard, file
-  download. The simulator stubs these out.
+```powershell
+npx playwright install chromium   # once
+npm run test:browser
+```
+
+It covers what the simulator can't:
+
+- every screen opens in a real browser with no console errors
+- **an entry typed in is still there after refreshing the page** — the one that
+  matters most
+- the backup button downloads real, parseable JSON matching the live data
+- the CSV export downloads
+- a statement opens a printable page
+- the data entry grid accepts typing
+
+These also run in CI on every push, in their own job.
+
+**Heads up:** these were written but never executed on my machine — the sandbox
+I built them in couldn't download a browser. The first real run happens in
+GitHub Actions. If one fails on the first push, it's most likely a selector
+that needs adjusting, not a broken app. The `playwright-report` artifact on the
+failed run will show exactly what it saw.
+
+## What is still not covered
+
 - Visual layout and CSS.
-- Saving to IndexedDB across a page reload.
 - The AI Assistant screen renders, but the Ollama calls aren't exercised.
-
-These get covered in Phase 3 with real-browser tests.
+- Restoring a backup end to end through the file picker.

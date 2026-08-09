@@ -8,17 +8,37 @@
  * Requires `npm run build` to have been run first.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { bootApp, APP_FILES } from './harness.js';
 
 const built = existsSync(APP_FILES.built);
 const when = built ? describe : describe.skip;
+
+/** Newest modification time anywhere under src/. */
+function newestSrcTime(dir = 'src') {
+  let newest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    newest = Math.max(newest, entry.isDirectory() ? newestSrcTime(p) : statSync(p).mtimeMs);
+  }
+  return newest;
+}
 
 when('the built single-file app', () => {
   let original, build;
   beforeAll(async () => {
     original = await bootApp('suite');
     build = await bootApp('built');
+  });
+
+  it('is actually up to date with src — a stale build proves nothing', () => {
+    // Without this, editing src/ and forgetting to rebuild makes every test
+    // below pass against the previous build. Silent false confidence.
+    expect(
+      statSync(APP_FILES.built).mtimeMs,
+      'dist is older than src — run `npm run build`'
+    ).toBeGreaterThan(newestSrcTime());
   });
 
   it('boots clean', () => {

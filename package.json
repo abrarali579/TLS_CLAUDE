@@ -8,9 +8,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:browser": "playwright test",
+    "check": "node tools/check-globals.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "acorn": "^8.18.0",
+    "acorn-globals": "^7.0.1",
+    "acorn-walk": "^8.3.5",
     "fake-indexeddb": "^6.0.0",
     "jsdom": "^25.0.1",
     "vite": "^5.4.21",
