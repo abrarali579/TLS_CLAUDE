@@ -11,6 +11,7 @@ import { field, input, mkBtn, pillControl } from './ui/forms.js';
 import { modal } from './ui/modal.js';
 import { audit, kvGet, kvSet, publishD, save, saveNow } from './core/persist.js';
 import { backendName, chooseBackend, isShared } from './core/backend.js';
+import { currentUser, loadSession, may, signOut } from './core/session.js';
 import { AC_ADD, acAdd, acHide, acI, acKeys, acNav, acOpen, acPick, acPicking, acPlace, acShow, acT, acX, bindAC } from './ui/autocomplete.js';
 import { bindPaste, bindRowLock, focusCell, gridCells, gridKey, lockRow, maxRow, unlockRow } from './ui/grid.js';
 import { SS, allCompanies, buildStatement, companyEntries, setSS } from './domain/statement.js';
@@ -126,9 +127,37 @@ const NAV = [
   {v:'data',i:'⚙',l:'Data & Settings',t:'Data & Settings',s:'backup, restore, company details',f:renderData}
 ];
 
-setNav(NAV);   // the router owns the screen list from here on
+/**
+ * The screens this person may actually use.
+ *
+ * Staff have no reason to see the partner profit split, so it is dropped from
+ * their sidebar. This is tidiness, not security — the server has already
+ * removed the figures themselves before they reach the browser.
+ */
+function visibleNav() {
+  if (may('seePartners')) return NAV;
+  return NAV.filter((x) => x.v !== 'partners');
+}
 
 /* ---------- startup wiring ---------- */
+
+/** A small chip in the toolbar: who you are, and a way out. */
+function showWhoIsSignedIn() {
+  const who = currentUser();
+  const tools = $('#tools');
+  if (!who || !tools) return;   // local file, nothing to show
+
+  const chip = el('div', 'userchip');
+  chip.append(el('span', 'un', who.name));
+  chip.append(el('span', 'ur', who.permissions?.label ?? who.role));
+
+  const out = el('button', 'btn ico', '⏻');
+  out.title = `Sign out of ${who.name}`;
+  out.onclick = async () => { await saveNow(); signOut(); };
+
+  chip.append(out);
+  tools.append(chip);
+}
 
 function initAI() {
   const b = $("#aifab");
@@ -153,7 +182,10 @@ function initMobile() {
   try { setTheme(localStorage.getItem("tl_theme") || "light"); } catch (e) { setTheme("light"); }
   const ts = $("#tsearch"); if (ts) ts.onclick = openSearch;
 
+  await loadSession();
+  setNav(visibleNav());   // the router owns the screen list from here on
   buildNav();
+  showWhoIsSignedIn();
   initMobile();
   initAI();
 
@@ -207,6 +239,8 @@ window.TimeLink = {
   rateMap, rateBust, findRate, invoiceRate,
   invTotals, vatRate, accountBalances, partnerData,
   ageAll, allAlerts, nextInvNo, waNumber,
+  // who is signed in, and what they may see
+  currentUser, may,
   // where the data is coming from, for tests and for the Data & Settings screen
   backendName, isShared,
 };

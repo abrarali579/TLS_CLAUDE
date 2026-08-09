@@ -5,6 +5,7 @@
  *   node tools/analyze.mjs src/main.js toast modal     -> what those depend on
  *   node tools/analyze.mjs src/main.js --users el      -> who depends on el
  */
+import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import * as acorn from 'acorn';
 import * as walk from 'acorn-walk';
@@ -58,7 +59,12 @@ export function depsOf(mod, decls, name) {
   return out;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Only run when this file IS the command, not when it is imported.
+// `file://${process.argv[1]}` looks right and works on Linux, but on Windows
+// argv[1] is "D:\\path\\file.mjs" while import.meta.url is
+// "file:///D:/path/file.mjs" — they never match, so the command does nothing
+// at all and prints nothing to explain why. pathToFileURL does it properly.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [file, ...rest] = process.argv.slice(2);
   const mod = load(file);
   const decls = topLevel(mod);

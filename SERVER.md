@@ -18,8 +18,19 @@ npm start
 ```
 TimeLink server on http://0.0.0.0:4000
 data folder: data
-no authentication yet — keep this on your office network
+
+Created the three starter accounts:
+  abrar@timelink.local       abrar123   (owner)
+  irfan@timelink.local       irfan123   (partner)
+  ayesha@timelink.local      ayesha123  (staff)
+
+These are placeholders — change them before real use.
+Keep this on your office network: there is no HTTPS.
 ```
+
+Those three accounts are created the first time the server runs, and written to
+`data\users.json`. Passwords are hashed with scrypt — the file never contains
+the password itself.
 
 Everyone else opens `http://<that-machine's-IP>:4000` in a browser — laptop or
 phone, doesn't matter. Find the IP with `ipconfig`; it usually looks like
@@ -112,19 +123,49 @@ So a bad import or a wrong bulk edit is recoverable, not fatal.
 | `PUT/GET/DELETE /api/files/:id` | File attachments |
 | anything else | The app itself |
 
-## Security — read this bit
+## Who can see what
 
-**There are no logins yet.** Anyone who can reach the machine on your network
-can read and change the books.
+| | Abrar (Owner) | M Irfan (Partner) | Ayesha (Staff) |
+|---|:---:|:---:|:---:|
+| Data entry, invoices, payments, statements | yes | yes | yes |
+| Partner shares and drawings | yes | yes | **no** |
+| Restore a backup / browse earlier versions | yes | yes | no |
+| Manage users | yes | no | no |
 
-That's fine on a private office network and nowhere else. Specifically:
+**Staff genuinely cannot see the partner figures** — this is not a hidden menu.
+The server removes those rows and the profit split from the response before it
+leaves the machine, so they are not in the browser at all. Hiding a screen in
+the browser would only hide it from someone who doesn't know about the
+developer tools.
 
+The tricky half is what happens when Ayesha saves. She holds a copy of the
+books with the partner rows missing; writing that back would delete them. So
+every save from an account that cannot see those rows has them **put back from
+the server's own copy first**. She can never see them, and can never destroy
+them — including deliberately: a forged partner row in a save from a staff
+account is ignored.
+
+Every save also records who made it, so the Activity Log now means something.
+
+### Change the passwords
+
+`abrar123` and friends are placeholders. Before real data goes in, change them:
+
+```powershell
+node -e "import('./server/auth.js').then(a=>console.log(a.hashPassword('your-new-password')))"
+```
+
+Paste the result into the matching user's `password` field in
+`data\users.json`, then restart the server.
+
+### Still not for the open internet
+
+- Traffic is **plain HTTP** — fine on your own WiFi, not over the internet
 - **Do not** forward port 4000 through your router
-- **Do not** put it on a public IP or a cloud server as it stands
-- **Do** keep it on office WiFi until logins are added
+- Anyone on your office network who has a password can sign in
 
-Logins and per-person roles — so staff can't see partner drawings, and the
-activity log records who did what — are the next step.
+Proper HTTPS and public access would need a certificate and a hardening pass.
+Say the word if you ever want the app reachable from outside the office.
 
 ## If something goes wrong
 

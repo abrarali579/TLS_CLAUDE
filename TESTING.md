@@ -29,8 +29,8 @@ npm test
 Takes about 12 seconds. You want to see:
 
 ```
-Test Files  11 passed (11)
-     Tests  149 passed (149)
+Test Files  13 passed (13)
+     Tests  215 passed (215)
 ```
 
 Some tests check the built app, so run `npm run build` first if you've changed
@@ -78,8 +78,10 @@ That second case is the only time it's right to edit a test to make it pass.
 | `test/money.test.js` | invoice totals, VAT, `accountBalances`, `partnerData` |
 | `test/smoke.test.js` | opens all 25 screens in both apps and fails if any breaks |
 | `test/build.test.js` | proves the built app behaves identically to the original |
-| `test/server.test.js` | the shared database and API, including two-people-at-once conflicts |
+| `test/server.test.js` | the API, sign-in, roles, and two-people-at-once conflicts |
 | `test/persist.test.js` | the save debounce, and that nothing is lost when the page closes |
+| `test/import.test.js` | reading the Google Sheets export, and re-running without duplicating |
+| `test/commands.test.js` | the commands and the server actually do something when you run them |
 
 `build.test.js` is the one that makes refactoring safe. It boots the built app
 and the frozen original side by side and compares screens, balances, partner
@@ -171,6 +173,29 @@ simulated browser could not:
   an exported value. Harmless in practice, but the build was full of warnings
   and it was one small step from being a real breakage. The tool now reads the
   syntax tree instead of matching text.
+
+### The Windows bug nothing caught
+
+Worth recording, because it is the clearest example so far of a whole class of
+test being missing rather than a test being wrong.
+
+Every command-line entry point ended with:
+
+```js
+if (import.meta.url === `file://${process.argv[1]}`)
+```
+
+On Linux that is true. On Windows `process.argv[1]` is `D:\path\file.mjs`
+while `import.meta.url` is `file:///D:/path/file.mjs` — so it is always false,
+and `node tools/import/import.mjs` did **nothing at all**, printing nothing to
+explain why. The same line was in `server/index.js`, so `npm start` would have
+silently failed too.
+
+Two hundred and eight tests passed throughout, because every one of them
+imported the code and called it directly. Nothing checked that *running the
+file* did anything. `test/commands.test.js` now runs the real commands as real
+processes and starts the real server, which is the only way this class of bug
+shows up.
 
 One more thing worth recording, because it cuts the other way: the first
 version of the page-hide test failed for a reason that was **the test's fault,

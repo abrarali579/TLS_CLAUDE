@@ -57,25 +57,58 @@ when('the built single-file app', () => {
       .toEqual(original.NAV.filter((x) => x.v).map((x) => x.v));
   });
 
-  it('loads the same seed data', () => {
-    for (const key of Object.keys(original.D)) {
-      const a = original.D[key], b = build.D[key];
-      if (Array.isArray(a)) expect(b.length, `${key} row count`).toBe(a.length);
+  // The sample records were removed once real data arrived, so the build no
+  // longer carries the same rows as the frozen original. What still has to
+  // match is the CODE — same screens, same date handling, same shapes.
+  // Figures are checked against the empty store below instead.
+
+  it('ships empty, ready for real data', () => {
+    // The Data Entry sheet always keeps a few blank rows so there is somewhere
+    // to type. Those are not records — judge by the business fields.
+    const filled = (r) => Boolean(r.company || r.employee || r.work || r.received || r.expense || r.amount || r.item || r.name || r.InvoiceNo);
+
+    for (const key of ['transactions', 'payments', 'invoices', 'ledger', 'rates', 'contacts', 'insurance']) {
+      const real = (build.D[key] ?? []).filter(filled);
+      expect(real.length, `${key} still contains sample records`).toBe(0);
     }
   });
 
-  it('produces identical account balances', () => {
-    expect(build.accountBalances()).toEqual(original.accountBalances());
+  it('still gives you blank rows to type into', () => {
+    expect(build.D.transactions.length).toBeGreaterThan(0);
   });
 
-  it('produces identical partner figures', () => {
-    expect(build.partnerData()).toEqual(original.partnerData());
+  it('keeps the company set-up — accounts, partners, VAT rate', () => {
+    // Configuration is not sample data. Wiping it would mean setting the
+    // business up again from scratch.
+    expect(build.D.settings.accounts.length).toBeGreaterThan(0);
+    expect(build.D.settings.partners.length).toBeGreaterThan(0);
+    expect(build.vatRate()).toBeGreaterThan(0);
   });
 
-  it('prices identically off the rates master', () => {
-    for (const item of Object.keys(original.rateMap()).slice(0, 40)) {
-      expect(build.findRate(item), item).toEqual(original.findRate(item));
+  it('is much smaller without the sample records', () => {
+    const built = statSync(APP_FILES.built).size;
+    const before = statSync(APP_FILES.suite).size;
+    expect(built).toBeLessThan(before / 2);
+  });
+
+  it('reports zeroes rather than breaking on an empty store', () => {
+    const partners = build.partnerData();
+    expect(partners.grossProfit).toBe(0);
+    expect(partners.distributable).toBe(0);
+    expect(partners.rows.length).toBe(build.D.settings.partners.length);
+
+    for (const account of build.accountBalances()) {
+      expect(Number.isFinite(account.balance), `${account.name} balance`).toBe(true);
     }
+  });
+
+  it('still refuses to invent a price when the rates master is empty', () => {
+    expect(build.findRate('ANYTHING AT ALL')).toBeNull();
+    expect(build.invoiceRate('ANYTHING AT ALL', 0)).toEqual({ rate: 0, src: 'none' });
+  });
+
+  it('starts invoice numbering from the first number of the month', () => {
+    expect(build.nextInvNo('2026-03-05')).toMatch(/^[A-Z]+260301$/);
   });
 
   it('reads dates identically', () => {

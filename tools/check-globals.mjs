@@ -8,6 +8,7 @@
  * rendered — and eight click handlers were dead. Nothing noticed until someone
  * clicked. A free-variable check catches that class of mistake in milliseconds.
  */
+import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 import detect from 'acorn-globals';
@@ -61,7 +62,12 @@ export function findUndeclared(dir = 'src') {
   return problems;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Only run when this file IS the command, not when it is imported.
+// `file://${process.argv[1]}` looks right and works on Linux, but on Windows
+// argv[1] is "D:\\path\\file.mjs" while import.meta.url is
+// "file:///D:/path/file.mjs" — they never match, so the command does nothing
+// at all and prints nothing to explain why. pathToFileURL does it properly.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const problems = findUndeclared(process.argv[2] || 'src');
   if (!problems.length) { console.log('OK — every name is declared, imported, or a known global'); process.exit(0); }
   for (const p of problems) console.error(`${p.file}:${p.line ?? '?'}  ${p.name} is not defined${p.detail ? ' — ' + p.detail : ''}`);

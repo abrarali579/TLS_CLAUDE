@@ -53,7 +53,7 @@ Short version:
 
 ```powershell
 npm run dev      # live preview while editing
-npm test         # 149 tests, about 15 seconds
+npm test         # 215 tests, about 20 seconds
 npm run check    # instant sanity check on imports
 npm run build    # ship it
 ```
@@ -77,7 +77,7 @@ src\
   ui\          toast, modal, forms, grid, autocomplete, pdf, widgets, theme
   views\       one file per screen
 server\        Node API for shared use — plain files, nothing to compile
-test\          149 tests
+test\          215 tests
 e2e\           real-Chrome tests
 tools\         safe code-extraction helpers
 dist\          build output (gitignored)
@@ -101,7 +101,7 @@ Easy to break by accident, expensive when broken:
 
 ## Automation
 
-Every push checks imports, builds the app, runs 149 tests, runs the
+Every push checks imports, builds the app, runs 215 tests, runs the
 real-browser tests in Chrome, verifies the output is genuinely self-contained,
 and attaches it to the run as a download. Nothing is published
 if a test fails. Dependabot proposes build-tool updates monthly and CI tests
@@ -115,13 +115,17 @@ Grab the latest tested build from **Actions → newest run → Artifacts**.
 npm start
 ```
 
-Then everyone opens `http://<that-machine's-IP>:4000` — laptops and phones.
-See **[SERVER.md](SERVER.md)**, including the security note: there are no
-logins yet, so keep it on your office network.
+Then everyone opens `http://<that-machine's-IP>:4000` — laptops and phones and
+signs in. Three accounts exist: Abrar (owner), M Irfan (partner), Ayesha
+(staff). Staff cannot see the partner profit split — enforced by the server,
+not just hidden in the menu. See **[SERVER.md](SERVER.md)**.
 
 ## Status
 
 Modularization is **done** — `src\main.js` is 12 KB of startup wiring, down
-from 279 KB, across 60 modules. Storage now sits behind an interface, so the
-app uses the shared server when there is one and this browser when there
-isn't. Next: logins and per-person roles.
+from 279 KB, across 60 modules. Storage sits behind an interface, so the app
+uses the shared server when there is one and this browser when there isn't.
+Logins and roles are in. The sample records have been removed, which took the
+shipped file from 1.1 MB to 352 KB.
+
+Next: import the real workbook, then the phone layout.

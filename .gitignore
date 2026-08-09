@@ -12,6 +12,11 @@ node_modules/
 # Build output — regenerate with `npm run build`, never edit by hand
 dist/
 
+# Real data exports — plain-text copies of your books. Never commit these.
+import/*.csv
+import/*.json
+import/report.md
+
 # The server's database — your actual books. NEVER commit this.
 data/
 *.db
