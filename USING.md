@@ -143,7 +143,7 @@ without going through the app's checks — take a backup first.
 
 | When | What happens |
 |---|---|
-| Every push to `main` | Check imports, build, run 121 tests, run the real-browser tests, verify the file is self-contained, publish it as a downloadable artifact |
+| Every push to `main` | Check imports, build, run 141 tests, run the real-browser tests, verify the file is self-contained, publish it as a downloadable artifact |
 | Every pull request | Same checks, so you see the result before merging |
 | Monthly | Dependabot opens PRs for build-tool updates; CI tests each one |
 
@@ -163,3 +163,4 @@ is at the bottom of the log.
 | Get the latest tested build | GitHub → Actions → newest run → Artifacts |
 | Understand a failing test | [TESTING.md](TESTING.md) |
 | Understand the code layout | [BUILD.md](BUILD.md) |
+| Share the books with my team | [SERVER.md](SERVER.md) |

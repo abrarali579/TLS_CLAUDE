@@ -29,8 +29,8 @@ npm test
 Takes about 12 seconds. You want to see:
 
 ```
-Test Files  9 passed (9)
-     Tests  121 passed (121)
+Test Files  10 passed (10)
+     Tests  141 passed (141)
 ```
 
 Some tests check the built app, so run `npm run build` first if you've changed
@@ -78,6 +78,7 @@ That second case is the only time it's right to edit a test to make it pass.
 | `test/money.test.js` | invoice totals, VAT, `accountBalances`, `partnerData` |
 | `test/smoke.test.js` | opens all 25 screens in both apps and fails if any breaks |
 | `test/build.test.js` | proves the built app behaves identically to the original |
+| `test/server.test.js` | the shared database and API, including two-people-at-once conflicts |
 
 `build.test.js` is the one that makes refactoring safe. It boots the built app
 and the frozen original side by side and compares screens, balances, partner
@@ -153,11 +154,28 @@ It covers what the simulator can't:
 
 These also run in CI on every push, in their own job.
 
-**Heads up:** these were written but never executed on my machine — the sandbox
-I built them in couldn't download a browser. The first real run happens in
-GitHub Actions. If one fails on the first push, it's most likely a selector
-that needs adjusting, not a broken app. The `playwright-report` artifact on the
-failed run will show exactly what it saw.
+### If it says "Timed out waiting 60000ms from config.webServer"
+
+That message means the test server never came up, and it used to hide the real
+reason. Two causes, both now fixed in `playwright.config.js`:
+
+- **`dist\` didn't exist.** The preview server has nothing to serve, exits
+  immediately, and Playwright just waits. The config now runs `npm run build`
+  first.
+- **localhost vs 127.0.0.1.** On Windows, `localhost` resolves to IPv6 `::1`,
+  so a server bound there is invisible to Playwright polling IPv4. Both ends
+  are now pinned to `127.0.0.1`.
+
+The config also pipes the server's own output, so a genuine error shows up
+instead of a bare timeout. If it still stalls, run the server by hand and read
+what it says:
+
+```powershell
+npm run build
+npx vite preview --port 4173 --strictPort --host 127.0.0.1
+```
+
+Then open http://127.0.0.1:4173/TimeLink-Suite.html in a browser.
 
 ## What is still not covered
 

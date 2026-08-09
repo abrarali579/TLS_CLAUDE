@@ -12,6 +12,12 @@ node_modules/
 # Build output — regenerate with `npm run build`, never edit by hand
 dist/
 
+# The server's database — your actual books. NEVER commit this.
+data/
+*.db
+*.db-wal
+*.db-shm
+
 # Playwright
 /test-results/
 /playwright-report/

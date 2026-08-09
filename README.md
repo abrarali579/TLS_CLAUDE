@@ -3,8 +3,10 @@
 Business management apps for a UAE services company — invoicing, payments,
 statements, cash book, partner shares, visa and insurance tracking.
 
-The app ships as a **single self-contained HTML file**. No server, no install,
-no internet needed. Data lives in the browser's IndexedDB.
+The app ships as a **single self-contained HTML file** — no install, no
+internet needed. Open it on its own and your data stays in that browser; run
+the included server and the whole team shares one set of books from laptops and
+phones.
 
 ## Quick start
 
@@ -39,6 +41,7 @@ into the build.
 
 Read these, in this order:
 
+- **[SERVER.md](SERVER.md)** — running the shared server for your team
 - **[USING.md](USING.md)** — running the app day to day, where your data lives,
   backups
 - **[BUILD.md](BUILD.md)** — which file to edit, how the build works, how
@@ -50,7 +53,7 @@ Short version:
 
 ```powershell
 npm run dev      # live preview while editing
-npm test         # 121 tests, about 13 seconds
+npm test         # 141 tests, about 13 seconds
 npm run check    # instant sanity check on imports
 npm run build    # ship it
 ```
@@ -66,13 +69,15 @@ and none of them end up in the shipped file.
 ```
 src\
   index.html   page shell, styles, seed data
-  main.js      the bulk of the app (shrinks as code is extracted)
+  main.js      startup wiring only — 12 KB
   lib\         format, dates, dom, csv
-  core\        store (D), persist (IndexedDB), seed
+  core\        store, router, persist, storage backends, seed
   domain\      accounts, invoices, statement, vat, ageing, partners,
-               recurring, employees, rates, rows, lists, dashboard
-  ui\          toast, modal, forms, grid, autocomplete, download, pdf, theme
-test\          121 tests (simulated browser)
+               recurring, employees, rates, rows, lists, dashboard, alerts
+  ui\          toast, modal, forms, grid, autocomplete, pdf, widgets, theme
+  views\       one file per screen
+server\        Node + SQLite API for shared use
+test\          141 tests
 e2e\           real-Chrome tests
 tools\         safe code-extraction helpers
 dist\          build output (gitignored)
@@ -96,7 +101,7 @@ Easy to break by accident, expensive when broken:
 
 ## Automation
 
-Every push checks imports, builds the app, runs 121 tests, runs the
+Every push checks imports, builds the app, runs 141 tests, runs the
 real-browser tests in Chrome, verifies the output is genuinely self-contained,
 and attaches it to the run as a download. Nothing is published
 if a test fails. Dependabot proposes build-tool updates monthly and CI tests
@@ -104,9 +109,19 @@ each one.
 
 Grab the latest tested build from **Actions → newest run → Artifacts**.
 
+## Sharing it with your team
+
+```powershell
+npm start
+```
+
+Then everyone opens `http://<that-machine's-IP>:4000` — laptops and phones.
+See **[SERVER.md](SERVER.md)**, including the security note: there are no
+logins yet, so keep it on your office network.
+
 ## Status
 
-Modularization is in progress. 29 modules are extracted; `src\main.js` still
-holds the screen-rendering code. Code moves out one module at a time, with the
-full suite green after each move. See BUILD.md for why the original
-`TimeLink-Suite.html` is still in the repo root.
+Modularization is **done** — `src\main.js` is 12 KB of startup wiring, down
+from 279 KB, across 60 modules. Storage now sits behind an interface, so the
+app uses the shared server when there is one and this browser when there
+isn't. Next: logins and per-person roles.
