@@ -26,12 +26,15 @@ it never goes to GitHub. You only do this once.
 npm test
 ```
 
-Takes about 10 seconds. You want to see:
+Takes about 12 seconds. You want to see:
 
 ```
-Test Files  4 passed (4)
-     Tests  49 passed (49)
+Test Files  6 passed (6)
+     Tests  74 passed (74)
 ```
+
+Some tests check the built app, so run `npm run build` first if you've changed
+anything in `src\`. They skip themselves rather than fail if `dist\` is missing.
 
 While you're editing, this reruns automatically every time you save:
 
@@ -66,10 +69,22 @@ That second case is the only time it's right to edit a test to make it pass.
 
 | File | Covers |
 |---|---|
+| `test/modules.test.js` | the extracted `src\` modules, imported directly — runs in milliseconds |
 | `test/dates.test.js` | `parseAnyDate` and `parseClipTable` — reading typed and pasted dates |
 | `test/rates.test.js` | `rateMap`, `findRate`, `invoiceRate` — what a customer gets charged |
 | `test/money.test.js` | invoice totals, VAT, `accountBalances`, `partnerData` |
 | `test/smoke.test.js` | opens all 25 screens in both apps and fails if any breaks |
+| `test/build.test.js` | proves the built app behaves identically to the original |
+
+`build.test.js` is the one that makes refactoring safe. It boots the built app
+and the frozen original side by side and compares screens, balances, partner
+figures, prices and date handling. While it's green, moving code around in
+`src\` cannot have changed what the app does.
+
+`modules.test.js` is the direction of travel. It imports from `src\` directly —
+no browser, no app boot, no seed data — so it runs in milliseconds. As more code
+moves out of `main.js`, more of the suite should look like that and less like
+the slow whole-app tests.
 
 Some rules these tests deliberately pin down, because they're valuable and easy
 to break by accident:

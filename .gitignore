@@ -9,6 +9,9 @@ graphify-out/*
 # Dependencies
 node_modules/
 
+# Build output — regenerate with `npm run build`, never edit by hand
+dist/
+
 # Environment / secrets
 .env
 .env.*

@@ -8,8 +8,11 @@ import FDBKeyRange from 'fake-indexeddb/lib/FDBKeyRange';
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 export const APP_FILES = {
+  // the original hand-written single files
   suite: resolve(HERE, '..', 'TimeLink-Suite.html'),
   phase1: resolve(HERE, '..', 'TimeLink-App-Phase1.html'),
+  // what `npm run build` produces from src/ — the file you actually ship
+  built: resolve(HERE, '..', 'dist', 'TimeLink-Suite.html'),
 };
 
 /**
@@ -18,11 +21,18 @@ export const APP_FILES = {
  * negative lookahead skips it.
  */
 function splitAppScript(html) {
-  const re = /<script(?![^>]*\b(?:src|type)=)[^>]*>([\s\S]*?)<\/script>/gi;
+  const re = /<script([^>]*)>([\s\S]*?)<\/script>/gi;
   let biggest = null;
-  for (const m of html.matchAll(re)) if (!biggest || m[1].length > biggest[1].length) biggest = m;
+  for (const m of html.matchAll(re)) {
+    const attrs = m[1];
+    if (/\bsrc=/.test(attrs)) continue;            // external file
+    if (/application\/json/.test(attrs)) continue;  // the seed data blob
+    if (!biggest || m[2].length > biggest[2].length) biggest = m;
+  }
   if (!biggest) throw new Error('no inline app script found');
-  return { code: biggest[1], shell: html.replace(biggest[0], '') };
+  // The built file ships this as type="module". Bundling has already resolved
+  // every import, so it evaluates fine as a plain script.
+  return { code: biggest[2], shell: html.replace(biggest[0], '') };
 }
 
 /**
@@ -98,8 +108,9 @@ export async function bootApp(which = 'suite', { timeout = 20000 } = {}) {
   win.eval(code + buildBridge(code));
 
   // Boot is async — wait until the data store exists.
+  const ready = () => win.D != null || (win.TimeLink && win.TimeLink.D != null);
   const start = Date.now();
-  while (win.D == null) {
+  while (!ready()) {
     if (Date.now() - start > timeout) {
       const seen = [...consoleErrors, ...uncaught].join(' | ') || 'none';
       throw new Error(`${which} did not boot within ${timeout}ms. errors: ${seen}`);
@@ -107,6 +118,17 @@ export async function bootApp(which = 'suite', { timeout = 20000 } = {}) {
     await new Promise((r) => setTimeout(r, 10));
   }
   await new Promise((r) => setTimeout(r, 50)); // let the first render settle
+
+  // The built bundle keeps its internals private and publishes a deliberate
+  // surface on window.TimeLink. Mirror it so one set of tests can run against
+  // both the original file and the build.
+  if (win.TimeLink) {
+    for (const key of Object.keys(win.TimeLink)) {
+      if (key in win && typeof win[key] !== 'undefined') continue;
+      const desc = Object.getOwnPropertyDescriptor(win.TimeLink, key);
+      try { Object.defineProperty(win, key, { configurable: true, ...desc }); } catch { /* ignore */ }
+    }
+  }
 
   return Object.assign(win, { __errors: consoleErrors, __uncaught: uncaught, __dom: dom });
 }
