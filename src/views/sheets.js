@@ -18,7 +18,7 @@ import { allCompanies, buildStatement, setSS } from '../domain/statement.js';
 import { csv } from '../lib/csv.js';
 import { daysAgo, fmtDate, parseAnyDate, today } from '../lib/dates.js';
 import { $, $$, debounce, el } from '../lib/dom.js';
-import { c, esc, m0, m2, n, uid } from '../lib/format.js';
+import { esc, m0, m2, n, uid } from '../lib/format.js';
 import { bindAC } from '../ui/autocomplete.js';
 import { dl } from '../ui/download.js';
 import { field, input, mkBtn, pillControl } from '../ui/forms.js';

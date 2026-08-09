@@ -6,7 +6,7 @@ import { AF, setAF } from '../domain/dashboard.js';
 import { csv } from '../lib/csv.js';
 import { daysAgo, fmtDate, today } from '../lib/dates.js';
 import { $, el } from '../lib/dom.js';
-import { c, esc, m0, n } from '../lib/format.js';
+import { esc, m0, n } from '../lib/format.js';
 import { dl } from '../ui/download.js';
 import { field, input, mkBtn } from '../ui/forms.js';
 import { modal } from '../ui/modal.js';

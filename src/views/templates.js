@@ -6,7 +6,7 @@ import { blankInvoice, nextInvNo } from '../domain/invoices.js';
 import { itemNames, serviceTypes } from '../domain/lists.js';
 import { findRate } from '../domain/rates.js';
 import { $, debounce, el } from '../lib/dom.js';
-import { c, esc, m0, m2, n } from '../lib/format.js';
+import { esc, m0, m2, n } from '../lib/format.js';
 import { bindAC } from '../ui/autocomplete.js';
 import { field, input, mkBtn } from '../ui/forms.js';
 import { focusCell, gridKey } from '../ui/grid.js';

@@ -1,7 +1,7 @@
 /** Receivables ageing: who owes money, and how long it has been outstanding. */
 import { allCompanies, companyEntries } from './statement.js';
 import { today } from '../lib/dates.js';
-import { c } from '../lib/format.js';
+
 
 export const AGE_BUCKETS=[
   {key:'current',label:'Current',max:30,color:'#22c55e'},

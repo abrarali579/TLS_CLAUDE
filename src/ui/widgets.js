@@ -1,6 +1,6 @@
 /** Small building blocks reused across screens: KPI tiles, grid widths, list layouts, sparklines. */
 import { $, debounce, el } from '../lib/dom.js';
-import { c, esc } from '../lib/format.js';
+import { esc } from '../lib/format.js';
 import { input } from './forms.js';
 
 export function kpiRow(items){

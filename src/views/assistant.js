@@ -17,7 +17,7 @@ import { allCompanies, buildStatement } from '../domain/statement.js';
 import { periodLabel, vatPeriods } from '../domain/vat.js';
 import { parseAnyDate, today } from '../lib/dates.js';
 import { $, el } from '../lib/dom.js';
-import { c, esc, m0, n, uid } from '../lib/format.js';
+import { esc, m0, n, uid } from '../lib/format.js';
 import { field, input, mkBtn } from '../ui/forms.js';
 import { modal } from '../ui/modal.js';
 import { toast } from '../ui/toast.js';

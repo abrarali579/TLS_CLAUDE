@@ -25,23 +25,56 @@ export async function kvSet(_key, value){
   return saveData(value === undefined ? D : value);
 }
 
-export let _t=null,_saveWarned=false,_conflict=false;
+let _t = null, _pending = null, _settle = null;
+export let _saveWarned = false, _conflict = false;
 
+/**
+ * Write the store. Debounced, so a burst of typing becomes one write.
+ *
+ * Returns a promise that resolves once the write has actually happened, which
+ * is what makes it possible to say "save, then reload" and mean it.
+ */
 export function save(){
-  publishD();clearTimeout(_t);
-  _t=setTimeout(()=>{
-    saveData(D).then(()=>{_saveWarned=false;}).catch((e)=>{
-      if(e instanceof ConflictError||e?.conflict){
-        // Someone else saved while this person was editing. Never overwrite
-        // them silently — say so and let the person reload.
-        if(!_conflict){_conflict=true;
-          try{toast('Someone else saved changes. Reload the page before carrying on, or your work may clash.',1);}catch(x){}}
-        return;
+  publishD();
+  clearTimeout(_t);
+  if(!_pending) _pending = new Promise((r) => { _settle = r; });
+  _t = setTimeout(() => { void writeNow(); }, 350);
+  return _pending;
+}
+
+/**
+ * Write immediately, skipping the wait.
+ *
+ * Used when the page is being hidden or closed. Without it, anything typed in
+ * the last third of a second before closing the tab would simply be lost —
+ * rare, but silent, and this is a book-keeping app.
+ */
+export function saveNow(){
+  clearTimeout(_t);
+  return writeNow();
+}
+
+async function writeNow(){
+  const settle = _settle;
+  _pending = null; _settle = null; _t = null;
+  try {
+    await saveData(D);
+    _saveWarned = false;
+  } catch (e) {
+    if (e instanceof ConflictError || e?.conflict) {
+      // Someone else saved while this person was editing. Never overwrite them
+      // silently — say so and let the person reload.
+      if (!_conflict) {
+        _conflict = true;
+        try { toast('Someone else saved changes. Reload the page before carrying on, or your work may clash.', 1); } catch (x) {}
       }
-      if(!_saveWarned){_saveWarned=true;
-        try{toast('Could not save — recent changes may be lost if you close this tab.',1);}catch(x){}}
-    });
-  },350);
+    } else if (!_saveWarned) {
+      _saveWarned = true;
+      try { toast('Could not save — recent changes may be lost if you close this tab.', 1); } catch (x) {}
+    }
+  } finally {
+    if (settle) settle();
+  }
 }
 
 export function audit(action,what,detail,before,after){

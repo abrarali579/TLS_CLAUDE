@@ -2,7 +2,7 @@
 import { audit, save } from '../core/persist.js';
 import { D } from '../core/store.js';
 import { rateBust } from '../domain/rates.js';
-import { c } from '../lib/format.js';
+
 import { toast, toastUndo } from './toast.js';
 
 export function quickAddCompany(name){

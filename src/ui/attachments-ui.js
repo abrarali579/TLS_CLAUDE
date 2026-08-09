@@ -4,7 +4,7 @@ import { D } from '../core/store.js';
 import { attachCount, attachmentsFor } from '../domain/attachments.js';
 import { fmtDate } from '../lib/dates.js';
 import { el } from '../lib/dom.js';
-import { c, esc, uid } from '../lib/format.js';
+import { esc, uid } from '../lib/format.js';
 import { modal } from './modal.js';
 import { toast } from './toast.js';
 

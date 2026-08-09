@@ -6,7 +6,7 @@ import { waNumber } from '../domain/whatsapp.js';
 import { csv } from '../lib/csv.js';
 import { daysAgo, fmtDate, today } from '../lib/dates.js';
 import { $, el } from '../lib/dom.js';
-import { c, esc, m0 } from '../lib/format.js';
+import { esc, m0 } from '../lib/format.js';
 import { bindAC } from '../ui/autocomplete.js';
 import { dl } from '../ui/download.js';
 import { field, input, mkBtn } from '../ui/forms.js';

@@ -3,7 +3,7 @@ import { audit, save } from '../core/persist.js';
 import { D } from '../core/store.js';
 import { rateBust } from '../domain/rates.js';
 import { $, debounce, el } from '../lib/dom.js';
-import { c, esc, m0, m2, n } from '../lib/format.js';
+import { esc, m0, m2, n } from '../lib/format.js';
 import { field, input, mkBtn } from '../ui/forms.js';
 import { modal } from '../ui/modal.js';
 import { toast } from '../ui/toast.js';

@@ -7,7 +7,7 @@
  */
 import { D } from '../core/store.js';
 import { buildStatement } from './statement.js';
-import { c, n } from '../lib/format.js';
+import { n } from '../lib/format.js';
 import { accentFor } from '../ui/theme.js';
 
 export function companyBalances(){

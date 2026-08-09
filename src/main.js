@@ -9,7 +9,7 @@ import { toast, toastUndo } from './ui/toast.js';
 import { dl } from './ui/download.js';
 import { field, input, mkBtn, pillControl } from './ui/forms.js';
 import { modal } from './ui/modal.js';
-import { audit, kvGet, kvSet, publishD, save } from './core/persist.js';
+import { audit, kvGet, kvSet, publishD, save, saveNow } from './core/persist.js';
 import { backendName, chooseBackend, isShared } from './core/backend.js';
 import { AC_ADD, acAdd, acHide, acI, acKeys, acNav, acOpen, acPick, acPicking, acPlace, acShow, acT, acX, bindAC } from './ui/autocomplete.js';
 import { bindPaste, bindRowLock, focusCell, gridCells, gridKey, lockRow, maxRow, unlockRow } from './ui/grid.js';
@@ -74,6 +74,11 @@ $("#tbtn").onclick = () => {
 // keep the autocomplete panel glued to its field while anything scrolls
 document.addEventListener("scroll", () => { if (acOpen()) acPlace(); }, true);
 addEventListener("resize", () => { if (acOpen()) acPlace(); });
+
+// Write anything still pending before the page goes away. Without this, a
+// change typed in the last third of a second before closing the tab is lost.
+addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveNow(); });
+addEventListener("pagehide", () => { saveNow(); });
 
 // Ctrl+K / Cmd+K opens search from anywhere
 document.addEventListener("keydown", (e) => {
@@ -189,7 +194,7 @@ window.TimeLink = {
   get D() { return D; },
   set D(v) { setD(v); },
   NAV, switchView,
-  save, audit,
+  save, saveNow, audit,
   get SS() { return SS; }, setSS,
   n, m2, esc, parseAnyDate, parseClipTable,
   rateMap, rateBust, findRate, invoiceRate,

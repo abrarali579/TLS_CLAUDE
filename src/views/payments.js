@@ -7,7 +7,7 @@ import { allCompanies } from '../domain/statement.js';
 import { csv } from '../lib/csv.js';
 import { daysAgo, today } from '../lib/dates.js';
 import { $, debounce, el } from '../lib/dom.js';
-import { c, m0, n } from '../lib/format.js';
+import { m0, n } from '../lib/format.js';
 import { bindAC } from '../ui/autocomplete.js';
 import { dl } from '../ui/download.js';
 import { input, mkBtn, pillControl } from '../ui/forms.js';

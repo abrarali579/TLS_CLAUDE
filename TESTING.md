@@ -29,8 +29,8 @@ npm test
 Takes about 12 seconds. You want to see:
 
 ```
-Test Files  10 passed (10)
-     Tests  141 passed (141)
+Test Files  11 passed (11)
+     Tests  148 passed (148)
 ```
 
 Some tests check the built app, so run `npm run build` first if you've changed
@@ -79,6 +79,7 @@ That second case is the only time it's right to edit a test to make it pass.
 | `test/smoke.test.js` | opens all 25 screens in both apps and fails if any breaks |
 | `test/build.test.js` | proves the built app behaves identically to the original |
 | `test/server.test.js` | the shared database and API, including two-people-at-once conflicts |
+| `test/persist.test.js` | the save debounce, and that nothing is lost when the page closes |
 
 `build.test.js` is the one that makes refactoring safe. It boots the built app
 and the frozen original side by side and compares screens, balances, partner
@@ -152,7 +153,24 @@ It covers what the simulator can't:
 - a statement opens a printable page
 - the data entry grid accepts typing
 
-These also run in CI on every push, in their own job.
+It also proves a save survives the page being closed — see below.
+
+These run in CI on every push too, in their own job.
+
+### What the browser tests found
+
+They were worth writing. On their first real run they caught two things the
+simulated browser could not:
+
+- **A change typed in the last third of a second before closing a tab was
+  lost.** `save()` waits for typing to settle before writing; closing the page
+  cancelled the pending write, silently. There is now a `saveNow()` that skips
+  the wait, and the app calls it whenever the page is hidden or closed.
+- **A phantom import.** Twenty-three files were importing a name that did not
+  exist, because the extraction tool had misread an arrow-function parameter as
+  an exported value. Harmless in practice, but the build was full of warnings
+  and it was one small step from being a real breakage. The tool now reads the
+  syntax tree instead of matching text.
 
 ### If it says "Timed out waiting 60000ms from config.webServer"
 

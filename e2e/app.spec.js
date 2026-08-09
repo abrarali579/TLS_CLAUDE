@@ -2,11 +2,24 @@ import { test, expect } from '@playwright/test';
 
 const APP = '/TimeLink-Suite.html';
 
+/**
+ * Noise we expect and do not want failing a test.
+ *
+ * On startup the app asks /api/health whether a shared server is there. Served
+ * by the real server that answers 200; served by the plain preview server it is
+ * a 404, and Chrome logs it. That 404 IS the feature working — it is how the
+ * app decides to fall back to local storage.
+ */
+const EXPECTED_NOISE = [/api\/health/, /Failed to load resource.*404/];
+const isNoise = (text) => EXPECTED_NOISE.some((re) => re.test(text));
+
 /** Wait until the app has booted and painted its first screen. */
 async function open(page) {
   const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  const note = (text) => { if (!isNoise(text)) errors.push(text); };
+  page.on('pageerror', (e) => note(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error') note(m.text()); });
+  page.on('requestfailed', (r) => { if (!isNoise(r.url())) errors.push(`request failed: ${r.url()}`); });
   await page.goto(APP);
   await page.waitForFunction(() => window.TimeLink && window.TimeLink.D, null, { timeout: 30_000 });
   await expect(page.locator('#view')).not.toBeEmpty();
@@ -52,7 +65,9 @@ test.describe('data survives a reload', () => {
         id: 'e2e-' + Date.now(), date: '2026-03-05', company,
         employee: 'TESTER', work: 'PRINT', received: 100, expense: 40, profit: 60, paidFrom: '',
       });
-      await T.save();
+      // saveNow(), not save() — save() waits a third of a second for typing to
+      // settle, and the reload below would cancel it.
+      await T.saveNow();
     }, marker);
 
     // A reload is the real test: this is where an in-memory-only app fails.
@@ -76,13 +91,42 @@ test.describe('data survives a reload', () => {
         id: 'e2e-profit-' + Date.now(), date: '2026-03-05', company: 'E2E PROFIT',
         employee: 'TESTER', work: 'PRINT', received: 500, expense: 200, profit: 300, paidFrom: '',
       });
-      await T.save();
+      await T.saveNow();
     });
 
     await page.reload();
     await page.waitForFunction(() => window.TimeLink && window.TimeLink.D);
     const after = await page.evaluate(() => window.TimeLink.partnerData().grossProfit);
     expect(after).toBeCloseTo(before + 300, 2);
+  });
+});
+
+test.describe('nothing is lost when the page goes away', () => {
+  test('a debounced save still lands if the tab is hidden straight after', async ({ page }) => {
+    await open(page);
+    const marker = `HIDE ${Date.now()}`;
+
+    await page.evaluate((company) => {
+      const T = window.TimeLink;
+      T.D.transactions.push({
+        id: 'e2e-hide-' + Date.now(), date: '2026-03-05', company,
+        employee: 'TESTER', work: 'PRINT', received: 10, expense: 0, profit: 10, paidFrom: '',
+      });
+      T.save();               // debounced — would normally wait 350ms
+    }, marker);
+
+    // Hiding the page must flush it immediately.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(200);
+
+    await page.reload();
+    await page.waitForFunction(() => window.TimeLink && window.TimeLink.D);
+    const found = await page.evaluate(
+      (company) => window.TimeLink.D.transactions.some((t) => t.company === company), marker);
+    expect(found, 'a pending save was lost when the page was hidden').toBe(true);
   });
 });
 

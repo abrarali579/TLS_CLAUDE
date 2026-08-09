@@ -53,7 +53,7 @@ Short version:
 
 ```powershell
 npm run dev      # live preview while editing
-npm test         # 141 tests, about 13 seconds
+npm test         # 148 tests, about 15 seconds
 npm run check    # instant sanity check on imports
 npm run build    # ship it
 ```
@@ -76,8 +76,8 @@ src\
                recurring, employees, rates, rows, lists, dashboard, alerts
   ui\          toast, modal, forms, grid, autocomplete, pdf, widgets, theme
   views\       one file per screen
-server\        Node + SQLite API for shared use
-test\          141 tests
+server\        Node API for shared use — plain files, nothing to compile
+test\          148 tests
 e2e\           real-Chrome tests
 tools\         safe code-extraction helpers
 dist\          build output (gitignored)
@@ -101,7 +101,7 @@ Easy to break by accident, expensive when broken:
 
 ## Automation
 
-Every push checks imports, builds the app, runs 141 tests, runs the
+Every push checks imports, builds the app, runs 148 tests, runs the
 real-browser tests in Chrome, verifies the output is genuinely self-contained,
 and attaches it to the run as a download. Nothing is published
 if a test fails. Dependabot proposes build-tool updates monthly and CI tests

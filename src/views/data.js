@@ -8,7 +8,7 @@ import { rateBust } from '../domain/rates.js';
 import { csv } from '../lib/csv.js';
 import { today } from '../lib/dates.js';
 import { $, el } from '../lib/dom.js';
-import { c, esc, n } from '../lib/format.js';
+import { esc, n } from '../lib/format.js';
 import { dl } from '../ui/download.js';
 import { field, input } from '../ui/forms.js';
 import { modal } from '../ui/modal.js';

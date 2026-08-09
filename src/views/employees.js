@@ -5,7 +5,7 @@ import { employeeHistory, employeeStats } from '../domain/employees.js';
 import { csv } from '../lib/csv.js';
 import { fmtDate, today } from '../lib/dates.js';
 import { $, debounce, el } from '../lib/dom.js';
-import { c, esc, m0 } from '../lib/format.js';
+import { esc, m0 } from '../lib/format.js';
 import { bindAC } from '../ui/autocomplete.js';
 import { dl } from '../ui/download.js';
 import { field, input, mkBtn } from '../ui/forms.js';

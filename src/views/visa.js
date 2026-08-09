@@ -2,7 +2,7 @@
 import { save } from '../core/persist.js';
 import { D } from '../core/store.js';
 import { $, debounce, el } from '../lib/dom.js';
-import { c } from '../lib/format.js';
+
 import { bindAC } from '../ui/autocomplete.js';
 import { input, mkBtn } from '../ui/forms.js';
 import { gw, kpiRow } from '../ui/widgets.js';

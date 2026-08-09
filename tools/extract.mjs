@@ -24,18 +24,28 @@ const MAIN = 'src/main.js';
  * hand; it fell behind, an import was silently dropped, and the app broke at
  * startup. Deriving it is the fix.
  */
+function exportedNames(src) {
+  const out = [];
+  let ast;
+  try { ast = acorn.parse(src, { ecmaVersion: 2022, sourceType: 'module' }); }
+  catch { return out; }
+  for (const node of ast.body) {
+    if (node.type !== 'ExportNamedDeclaration' || !node.declaration) continue;
+    const d = node.declaration;
+    if (d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration') out.push(d.id.name);
+    else if (d.type === 'VariableDeclaration') {
+      for (const v of d.declarations) if (v.id.type === 'Identifier') out.push(v.id.name);
+    }
+  }
+  return out;
+}
+
 function scanExports(dir = 'src', acc = {}) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, entry.name).replace(/\\/g, '/');
     if (entry.isDirectory()) { scanExports(p, acc); continue; }
     if (!entry.name.endsWith('.js') || p === MAIN) continue;
-    const src = fs.readFileSync(p, 'utf8');
-    const names = [
-      ...[...src.matchAll(/^export\s+(?:async\s+)?function\s*\*?\s*([A-Za-z0-9_$]+)/gm)].map((m) => m[1]),
-      ...[...src.matchAll(/^export\s+(?:const|let|var)\s+([\s\S]*?);\s*$/gm)].flatMap((m) =>
-        [...m[1].matchAll(/(^|,)\s*([A-Za-z0-9_$]+)\s*=/g)].map((x) => x[2])
-      ),
-    ];
+    const names = exportedNames(fs.readFileSync(p, 'utf8'));
     if (names.length) acc[p] = [...new Set(names)];
   }
   return acc;

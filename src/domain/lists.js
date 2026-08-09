@@ -2,7 +2,7 @@
 import { D } from '../core/store.js';
 import { accountNames } from './accounts.js';
 import { allCompanies } from './statement.js';
-import { c } from '../lib/format.js';
+
 
 export function serviceTypes(){return [...new Set(D.taskTemplates.map(t=>t.serviceType))].sort();}
 

@@ -3,7 +3,7 @@
  * still owed, and the running balance.
  */
 import { D } from '../core/store.js';
-import { c, n } from '../lib/format.js';
+import { n } from '../lib/format.js';
 
 export let SS={company:'',from:'',to:''};
 

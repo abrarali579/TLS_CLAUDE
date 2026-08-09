@@ -6,7 +6,7 @@
  */
 import { D } from '../core/store.js';
 import { today } from '../lib/dates.js';
-import { c, n } from '../lib/format.js';
+import { n } from '../lib/format.js';
 
 export const LINE_ROWS=20;
 

@@ -7,7 +7,7 @@ import { isBlankExp, monthKey, newExp } from '../domain/rows.js';
 import { csv } from '../lib/csv.js';
 import { today } from '../lib/dates.js';
 import { $, debounce, el } from '../lib/dom.js';
-import { c, esc, m0, n } from '../lib/format.js';
+import { esc, m0, n } from '../lib/format.js';
 import { attachButton } from '../ui/attachments-ui.js';
 import { bindAC } from '../ui/autocomplete.js';
 import { dl } from '../ui/download.js';
