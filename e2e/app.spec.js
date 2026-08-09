@@ -118,7 +118,9 @@ test.describe('nothing is lost when the page goes away', () => {
     // Hiding the page must flush it immediately.
     await page.evaluate(() => {
       Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
-      document.dispatchEvent(new Event('visibilitychange'));
+      // bubbles: true — the default is false, and a non-bubbling event never
+      // reaches a listener attached anywhere but document itself.
+      document.dispatchEvent(new Event('visibilitychange', { bubbles: true }));
     });
     await page.waitForTimeout(200);
 

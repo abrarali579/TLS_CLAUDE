@@ -94,3 +94,36 @@ when('the built single-file app', () => {
     expect(broken).toEqual([]);
   });
 });
+
+/**
+ * Hiding the page must flush a pending save.
+ *
+ * Scope, honestly: this proves the flush happens at all — remove it and this
+ * test fails. It does NOT prove the listener is on the right object, because
+ * the synthetic event here bubbles just as a real one does, so window and
+ * document both hear it. The listener lives on document because that is where
+ * visibilitychange is fired; the browser test is what exercises the real path.
+ */
+when('flushing on page hide', () => {
+  it('writes a debounced save when the page is hidden', async () => {
+    const app = await bootApp('built');
+    const marker = `HIDE-${Date.now()}`;
+
+    app.TimeLink.D.transactions.push({
+      id: 'hide-test', date: '2026-03-05', company: marker,
+      employee: 'T', work: 'PRINT', received: 10, expense: 0, profit: 10, paidFrom: '',
+    });
+    app.TimeLink.save(); // debounced — deliberately not awaited
+
+    Object.defineProperty(app.document, 'visibilityState', { value: 'hidden', configurable: true });
+    app.document.dispatchEvent(new app.window.Event('visibilitychange', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+
+    const stored = await app.TimeLink.readStored();
+    expect(stored, 'nothing was written at all').toBeTruthy();
+    expect(
+      stored.transactions.some((t) => t.company === marker),
+      'the pending save was lost when the page was hidden'
+    ).toBe(true);
+  });
+});

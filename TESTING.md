@@ -30,7 +30,7 @@ Takes about 12 seconds. You want to see:
 
 ```
 Test Files  11 passed (11)
-     Tests  148 passed (148)
+     Tests  149 passed (149)
 ```
 
 Some tests check the built app, so run `npm run build` first if you've changed
@@ -171,6 +171,14 @@ simulated browser could not:
   an exported value. Harmless in practice, but the build was full of warnings
   and it was one small step from being a real breakage. The tool now reads the
   syntax tree instead of matching text.
+
+One more thing worth recording, because it cuts the other way: the first
+version of the page-hide test failed for a reason that was **the test's fault,
+not the app's**. It dispatched a synthetic `visibilitychange` event, and
+synthetic events do not bubble unless you ask them to — so the app never heard
+it. A real browser fires that event bubbling, so the app was fine. Worth
+remembering when a test goes red: check the test is asking a fair question
+before changing the code.
 
 ### If it says "Timed out waiting 60000ms from config.webServer"
 

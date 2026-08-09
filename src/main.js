@@ -77,7 +77,12 @@ addEventListener("resize", () => { if (acOpen()) acPlace(); });
 
 // Write anything still pending before the page goes away. Without this, a
 // change typed in the last third of a second before closing the tab is lost.
-addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveNow(); });
+// visibilitychange is fired AT document, so listen there. Hanging it on window
+// only works while the event happens to bubble, which is exactly the kind of
+// thing that silently stops being true.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveNow();
+});
 addEventListener("pagehide", () => { saveNow(); });
 
 // Ctrl+K / Cmd+K opens search from anywhere
@@ -195,6 +200,8 @@ window.TimeLink = {
   set D(v) { setD(v); },
   NAV, switchView,
   save, saveNow, audit,
+  // read straight back out of storage, so a test can prove a write landed
+  readStored: kvGet,
   get SS() { return SS; }, setSS,
   n, m2, esc, parseAnyDate, parseClipTable,
   rateMap, rateBust, findRate, invoiceRate,
