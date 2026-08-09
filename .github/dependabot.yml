@@ -1,0 +1,17 @@
+# Keeps the build tools up to date. Dependabot opens a pull request; CI runs the
+# tests against it, so you can see whether an update is safe before merging.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

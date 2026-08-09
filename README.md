@@ -37,8 +37,10 @@ into the build.
 
 ## Working on it
 
-Read these two, in this order:
+Read these, in this order:
 
+- **[USING.md](USING.md)** — running the app day to day, where your data lives,
+  backups
 - **[BUILD.md](BUILD.md)** — which file to edit, how the build works, how
   modules fit together
 - **[TESTING.md](TESTING.md)** — how to run the tests and what to do when one
@@ -87,6 +89,15 @@ Easy to break by accident, expensive when broken:
 - A payment mirrored from the cash book is **counted once**, not twice
 - When no rate matches, the price is `0` with source `none` — the app never
   guesses
+
+## Automation
+
+Every push runs the tests, builds the app, checks the output is genuinely
+self-contained, and attaches it to the run as a download. Nothing is published
+if a test fails. Dependabot proposes build-tool updates monthly and CI tests
+each one.
+
+Grab the latest tested build from **Actions → newest run → Artifacts**.
 
 ## Status
 

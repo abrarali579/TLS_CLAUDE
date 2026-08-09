@@ -1,0 +1,51 @@
+name: CI
+
+# Runs on every push and pull request. If the tests fail, the build is not
+# published — so a broken version never becomes the one you download.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the single-file app
+        run: npm run build
+
+      - name: Run the tests
+        run: npm test
+
+      - name: Check the built file really is self-contained
+        run: |
+          FILE=dist/TimeLink-Suite.html
+          test -f "$FILE" || { echo "::error::build produced no $FILE"; exit 1; }
+          if grep -qE '<script[^>]+src=|<link[^>]+stylesheet' "$FILE"; then
+            echo "::error::$FILE references external files — it must be fully self-contained"
+            exit 1
+          fi
+          echo "OK — $(du -h "$FILE" | cut -f1) self-contained"
+
+      - name: Attach the built app to this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimeLink-Suite
+          path: dist/TimeLink-Suite.html
+          retention-days: 90
